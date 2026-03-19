@@ -24,7 +24,7 @@ async function getSheets() {
   let key = process.env.GOOGLE_PRIVATE_KEY;
   
   // 如果缺少任何一個，就回傳 null 而不是拋出錯誤
-  if (!email || !key || !SPREADSHEET_ID) {
+  if (!email || !key || !SPREADSHEET_ID || email === "undefined" || key === "undefined" || key === "null" || SPREADSHEET_ID === "undefined") {
     return null;
   }
   
@@ -56,7 +56,7 @@ async function initializeSheet() {
   const key = process.env.GOOGLE_PRIVATE_KEY;
   
   // 如果沒有設定憑證，直接標記為初始化完成但失敗，不執行後續邏輯
-  if (!email || !key || !SPREADSHEET_ID) {
+  if (!email || !key || !SPREADSHEET_ID || email === "undefined" || key === "undefined" || key === "null" || SPREADSHEET_ID === "undefined") {
     console.log("ℹ️ 未偵測到 Google Sheets 憑證，將跳過直接連線模式。");
     sheetInitStatus = { success: false, error: "缺少憑證", initialized: true };
     return;
@@ -115,7 +115,8 @@ async function startServer() {
   // Initialize SQLite (Optional)
   if (!process.env.VERCEL) {
     try {
-      const Database = (await import("better-sqlite3")).default;
+      const sqliteModuleName = "better-sqlite3";
+      const Database = (await import(/* @vite-ignore */ sqliteModuleName)).default;
       const dbPath = "family_sync.db";
       db_local = new Database(dbPath);
       db_local.exec(`
@@ -226,6 +227,13 @@ async function startServer() {
         
         if (Array.isArray(response.data)) {
           return res.json({ events: response.data, source: "google_apps_script" });
+        } else if (response.data && Array.isArray(response.data.events)) {
+          return res.json({ events: response.data.events, source: "google_apps_script" });
+        } else if (response.data && response.data.error) {
+          throw new Error(response.data.error);
+        } else {
+          console.warn("Apps Script returned unexpected format:", typeof response.data === 'string' ? response.data.substring(0, 100) : response.data);
+          throw new Error("Apps Script 傳回的資料格式不符合預期。");
         }
       } catch (error: any) {
         console.error("Apps Script Fetch Error:", error.message);
@@ -341,7 +349,9 @@ async function startServer() {
         res.json({ events: rows, source: "local", warning: warningMsg });
       } else {
         res.status(500).json({ 
-          error: "無法取得活動資料。請確認環境變數 (GOOGLE_SHEET_ID 或 GOOGLE_APPS_SCRIPT_URL) 已正確設定。",
+          error: typeof appsScriptWarning !== 'undefined'
+            ? `Apps Script 讀取失敗且無 Sheets API 備援: ${appsScriptWarning}`
+            : "無法取得活動資料。請確認環境變數 (GOOGLE_SHEET_ID 或 GOOGLE_APPS_SCRIPT_URL) 已正確設定。",
           warning: typeof appsScriptWarning !== 'undefined' ? appsScriptWarning : undefined
         });
       }
@@ -697,7 +707,12 @@ async function startServer() {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         }
       } else {
-        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
+        res.status(500).json({ 
+          error: typeof appsScriptUpdateWarning !== 'undefined' 
+            ? `Apps Script 更新失敗且無 Sheets API 備援: ${appsScriptUpdateWarning}` 
+            : "更新失敗：Google 試算表未設定且本地資料庫不可用。",
+          warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined 
+        });
       }
     } catch (error: any) {
       console.error("SQLite Update Error:", error.message);
@@ -1008,12 +1023,17 @@ async function startServer() {
     }
 
     // Check if both failed
-    if (APPS_SCRIPT_URL && results.gas?.success === false && SPREADSHEET_ID && results.sheets?.success === false) {
-      return res.status(500).json({ error: `刪除失敗: Apps Script (${results.gas.error}), Sheets API (${results.sheets.error})` });
-    } else if (APPS_SCRIPT_URL && results.gas?.success === false && !SPREADSHEET_ID) {
-      return res.status(500).json({ error: `Apps Script 刪除失敗: ${results.gas.error}` });
-    } else if (SPREADSHEET_ID && results.sheets?.success === false && !APPS_SCRIPT_URL) {
-      return res.status(500).json({ error: `Google Sheets API 刪除失敗: ${results.sheets.error}` });
+    const gasFailed = APPS_SCRIPT_URL && results.gas?.success === false;
+    const sheetsFailed = SPREADSHEET_ID && (results.sheets?.success === false || (!sheetInitStatus.success && !results.sheets));
+    
+    if (gasFailed && sheetsFailed) {
+      return res.status(500).json({ error: `刪除失敗: Apps Script (${results.gas?.error}), Sheets API (${results.sheets?.error || '未初始化'})` });
+    } else if (gasFailed && !SPREADSHEET_ID) {
+      return res.status(500).json({ error: `Apps Script 刪除失敗: ${results.gas?.error}` });
+    } else if (sheetsFailed && !APPS_SCRIPT_URL) {
+      return res.status(500).json({ error: `Google Sheets API 刪除失敗: ${results.sheets?.error || '未初始化'}` });
+    } else if (gasFailed && !sheetInitStatus.success) {
+      return res.status(500).json({ error: `Apps Script 刪除失敗且無 Sheets API 備援: ${results.gas?.error}` });
     }
 
     res.json({ success: true, results });
@@ -1029,13 +1049,17 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.error("Vite initialization failed:", e);
+    }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
