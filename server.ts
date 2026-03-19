@@ -156,6 +156,13 @@ async function startServer() {
   app.use(express.json());
 
   // Initialize sheet on start
+  if (process.env.GOOGLE_PRIVATE_KEY) {
+    const key = process.env.GOOGLE_PRIVATE_KEY;
+    console.log(`🔑 偵測到 Private Key, 長度: ${key.length}, 開頭: ${key.substring(0, 30)}...`);
+    if (!key.includes("-----BEGIN PRIVATE KEY-----")) {
+      console.warn("⚠️ Private Key 格式似乎不正確，應包含 '-----BEGIN PRIVATE KEY-----'");
+    }
+  }
   await initializeSheet();
 
   // API Routes
@@ -184,7 +191,12 @@ async function startServer() {
       serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "未設定",
       hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
       hasAppsScript: !!APPS_SCRIPT_URL,
-      sheetInit: sheetInitStatus
+      sheetInit: sheetInitStatus,
+      sqliteAvailable: !!db_local,
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: !!process.env.VERCEL,
+      }
     });
   });
 

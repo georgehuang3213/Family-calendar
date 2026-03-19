@@ -234,11 +234,19 @@ export default function App() {
     try {
       if (showLoading) setLoading(true);
       const res = await fetch('/api/events');
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || '無法取得活動資料');
+      
+      const contentType = res.headers.get("content-type");
+      let data;
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`伺服器傳回非 JSON 回應: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
       }
-      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || '無法取得活動資料');
+      }
       
       // 確保所有 ID 都轉換為字串
       const processedEvents = (data.events || []).map((event: Event) => ({
@@ -252,6 +260,9 @@ export default function App() {
       setError(null);
     } catch (err: any) {
       setError(err.message);
+      // 如果發生錯誤，自動顯示除錯資訊以便使用者排查
+      setShowDebug(true);
+      fetchConfigStatus();
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -698,6 +709,8 @@ export default function App() {
                 <p>Service Account: {configStatus.serviceAccountEmail}</p>
                 <p>Private Key: {configStatus.hasPrivateKey ? '✅ 已設定' : '❌ 未設定'}</p>
                 <p>Apps Script URL: {configStatus.hasAppsScript ? '✅ 已設定' : '❌ 未設定'}</p>
+                <p>SQLite 資料庫: {configStatus.sqliteAvailable ? '✅ 可用' : '❌ 不可用 (Vercel 可能限制 native 模組)'}</p>
+                <p>環境: {configStatus.env?.VERCEL ? 'Vercel' : 'AI Studio / Local'} ({configStatus.env?.NODE_ENV})</p>
                 {configStatus.sheetInit && (
                   <p className={cn("mt-1", configStatus.sheetInit.success ? "text-emerald-600" : "text-red-600")}>
                     試算表初始化: {configStatus.sheetInit.success ? '✅ 成功' : `❌ 失敗 (${configStatus.sheetInit.error})`}
