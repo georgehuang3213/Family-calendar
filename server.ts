@@ -28,10 +28,15 @@ const LEAVES_SHEET_NAME = "假表紀錄";
 let LEAVES_RANGE = `${LEAVES_SHEET_NAME}!A:G`;
 
 // Google Apps Script URL (Alternative)
-const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbz2nCVfE4Vkrci6UZAPVbHPwgirim60bbRFbokPBVg-UYvUwavew720sq5PJ40dyQvwEg/exec";
+const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+
+let sheetInitStatus = { success: false, error: null as string | null };
 
 async function initializeSheet() {
-  if (!SPREADSHEET_ID || !sheets) return;
+  if (!SPREADSHEET_ID || !sheets) {
+    sheetInitStatus = { success: false, error: "未設定 SPREADSHEET_ID 或 Google Sheets API 憑證" };
+    return;
+  }
   try {
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
     const sheetsList = spreadsheet.data.sheets || [];
@@ -86,8 +91,10 @@ async function initializeSheet() {
       });
       console.log("✅ 假表紀錄分頁已自動建立");
     }
+    sheetInitStatus = { success: true, error: null };
   } catch (error: any) {
     console.error("❌ 試算表初始化失敗:", error.message);
+    sheetInitStatus = { success: false, error: error.message };
   }
 }
 
@@ -98,7 +105,8 @@ async function startServer() {
   // Initialize SQLite (Optional)
   try {
     const Database = (await import("better-sqlite3")).default;
-    db_local = new Database("family_sync.db");
+    const dbPath = process.env.VERCEL ? path.join("/tmp", "family_sync.db") : "family_sync.db";
+    db_local = new Database(dbPath);
     db_local.exec(`
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,7 +183,8 @@ async function startServer() {
       hasSheetId: !!SPREADSHEET_ID,
       serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "未設定",
       hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
-      hasAppsScript: !!APPS_SCRIPT_URL
+      hasAppsScript: !!APPS_SCRIPT_URL,
+      sheetInit: sheetInitStatus
     });
   });
 
@@ -326,14 +335,6 @@ async function startServer() {
     // Priority 1: Google Apps Script
     if (APPS_SCRIPT_URL) {
       try {
-        console.log("Sending event to Apps Script, payload:", {
-          ...eventData,
-          action: eventData.action || 'create',
-          id: eventId,
-          isLeave: isLeave,
-          targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
-        });
-
         const response = await axios.post(APPS_SCRIPT_URL, {
           ...eventData,
           action: eventData.action || 'create',
@@ -388,8 +389,8 @@ async function startServer() {
         
         return res.json({ success: true, source: "google_apps_script", target: isLeave ? "leaves" : "main", id: finalId });
       } catch (error: any) {
-        console.error("Apps Script Save Error:", error.message);
-        return res.status(500).json({ error: error.message || "Failed to save event via Apps Script" });
+        console.error("Apps Script Save Error, falling back to Sheets API:", error.message);
+        var appsScriptWarning = error.message;
       }
     }
 
@@ -559,8 +560,8 @@ async function startServer() {
         
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
-        console.error("Apps Script Update Error:", error.message);
-        return res.status(500).json({ error: error.message || "Failed to update event via Apps Script" });
+        console.error("Apps Script Update Error, falling back to Sheets API:", error.message);
+        var appsScriptUpdateWarning = error.message;
       }
     }
 
@@ -682,16 +683,16 @@ async function startServer() {
         `);
         const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, id, id);
         if (result.changes > 0) {
-          res.json({ success: true, source: "local" });
+          res.json({ success: true, source: "local", warning: appsScriptUpdateWarning });
         } else {
-          res.status(404).json({ error: "Event not found" });
+          res.status(404).json({ error: "Event not found", warning: appsScriptUpdateWarning });
         }
       } else {
-        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。" });
+        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。", warning: appsScriptUpdateWarning });
       }
     } catch (error: any) {
       console.error("SQLite Update Error:", error.message);
-      res.status(500).json({ error: "Failed to update event locally" });
+      res.status(500).json({ error: "Failed to update event locally", warning: appsScriptUpdateWarning });
     }
   });
 

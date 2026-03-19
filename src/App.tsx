@@ -486,6 +486,14 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-1.5 md:gap-4">
+          <button 
+            onClick={() => fetchEvents(true)}
+            className="p-2 text-stone-500 hover:text-indigo-600 transition-colors bg-white border border-stone-200 rounded-lg shadow-sm"
+            title="重新整理"
+          >
+            <Zap size={16} className={cn(loading && "animate-pulse text-indigo-500")} />
+          </button>
+
           <div className="flex items-center bg-stone-100 rounded-lg p-0.5 md:p-1">
             <button 
               onClick={() => setCurrentDate(subMonths(currentDate, 1))}
@@ -648,9 +656,18 @@ export default function App() {
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-6 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <X size={20} />
-              <p className="text-sm font-medium">{error}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle size={20} />
+                <p className="text-sm font-medium">{error}</p>
+              </div>
+              <button 
+                onClick={() => fetchEvents(true)}
+                className="flex items-center gap-1 px-3 py-1 bg-red-100 hover:bg-red-200 rounded-lg text-xs font-bold transition-colors"
+              >
+                <Zap size={12} />
+                <span>重試</span>
+              </button>
             </div>
             <button 
               onClick={() => setShowDebug(!showDebug)}
@@ -664,6 +681,11 @@ export default function App() {
                 <p>Service Account: {configStatus.serviceAccountEmail}</p>
                 <p>Private Key: {configStatus.hasPrivateKey ? '✅ 已設定' : '❌ 未設定'}</p>
                 <p>Apps Script URL: {configStatus.hasAppsScript ? '✅ 已設定' : '❌ 未設定'}</p>
+                {configStatus.sheetInit && (
+                  <p className={cn("mt-1", configStatus.sheetInit.success ? "text-emerald-600" : "text-red-600")}>
+                    試算表初始化: {configStatus.sheetInit.success ? '✅ 成功' : `❌ 失敗 (${configStatus.sheetInit.error})`}
+                  </p>
+                )}
                 <p className="mt-2 text-stone-400">提示：請在 Vercel 專案設定中新增這些環境變數。</p>
               </div>
             )}
