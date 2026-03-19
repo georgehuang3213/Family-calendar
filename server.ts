@@ -9,39 +9,54 @@ dotenv.config();
 
 let db_local: any = null;
 
-// Google Sheets setup (Direct API)
-const hasSheetsCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY;
-let sheets: any = null;
-if (hasSheetsCredentials) {
-  const auth = new google.auth.JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
-  sheets = google.sheets({ version: "v4", auth });
-}
+// Google Sheets setup (Lazy Initialization)
+let sheetsInstance: any = null;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
-let MAIN_SHEET_NAME = "Sheet1"; // Default, will be updated in initializeSheet
-let RANGE = `${MAIN_SHEET_NAME}!A:G`; 
+let MAIN_SHEET_NAME = "Sheet1";
+let RANGE = `${MAIN_SHEET_NAME}!A:G`;
 const LEAVES_SHEET_NAME = "假表紀錄";
 let LEAVES_RANGE = `${LEAVES_SHEET_NAME}!A:G`;
 
-// Google Apps Script URL (Alternative)
-const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+async function getSheets() {
+  if (sheetsInstance) return sheetsInstance;
+  
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  let key = process.env.GOOGLE_PRIVATE_KEY;
+  
+  if (!email || !key || !SPREADSHEET_ID) {
+    throw new Error("缺少 Google Sheets 必要設定 (Email, Key 或 ID)");
+  }
+  
+  try {
+    if (key.includes('\\n')) {
+      key = key.replace(/\\n/g, '\n');
+    }
+    
+    const auth = new google.auth.JWT({
+      email,
+      key,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    
+    sheetsInstance = google.sheets({ version: "v4", auth });
+    return sheetsInstance;
+  } catch (err: any) {
+    console.error("Google Auth Error:", err.message);
+    throw err;
+  }
+}
 
-let sheetInitStatus = { success: false, error: null as string | null };
+let sheetInitStatus = { success: false, error: null as string | null, initialized: false };
 
 async function initializeSheet() {
-  if (!SPREADSHEET_ID || !sheets) {
-    sheetInitStatus = { success: false, error: "未設定 SPREADSHEET_ID 或 Google Sheets API 憑證" };
-    return;
-  }
+  if (sheetInitStatus.initialized) return;
+  
   try {
+    const sheets = await getSheets();
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
     const sheetsList = spreadsheet.data.sheets || [];
-    const sheetNames = sheetsList.map(s => s.properties?.title) || [];
+    const sheetNames = sheetsList.map((s: any) => s.properties?.title) || [];
 
-    // Detect Main Sheet (use the first one if Sheet1 doesn't exist)
     if (sheetNames.length > 0) {
       if (sheetNames.includes("Sheet1")) {
         MAIN_SHEET_NAME = "Sheet1";
@@ -51,28 +66,8 @@ async function initializeSheet() {
         MAIN_SHEET_NAME = sheetNames[0] || "Sheet1";
       }
       RANGE = `${MAIN_SHEET_NAME}!A:G`;
-      console.log(`📌 使用主分頁: ${MAIN_SHEET_NAME}`);
     }
 
-    // Initialize Main Sheet Headers
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${MAIN_SHEET_NAME}!A1:G1`,
-    });
-    const rows = response.data.values;
-    if (!rows || rows.length === 0 || rows[0].length === 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${MAIN_SHEET_NAME}!A1:G1`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [["title", "description", "start_date", "end_date", "time", "member_name", "color"]],
-        },
-      });
-      console.log(`✅ 主試算表 (${MAIN_SHEET_NAME}) 欄位已自動建立`);
-    }
-
-    // Initialize Leaves Sheet
     if (!sheetNames.includes(LEAVES_SHEET_NAME)) {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -88,12 +83,12 @@ async function initializeSheet() {
           values: [["title", "description", "start_date", "end_date", "time", "member_name", "color"]],
         },
       });
-      console.log("✅ 假表紀錄分頁已自動建立");
     }
-    sheetInitStatus = { success: true, error: null };
+    
+    sheetInitStatus = { success: true, error: null, initialized: true };
   } catch (error: any) {
     console.error("❌ 試算表初始化失敗:", error.message);
-    sheetInitStatus = { success: false, error: error.message };
+    sheetInitStatus = { success: false, error: error.message, initialized: true };
   }
 }
 
@@ -158,28 +153,9 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Initialize sheet on start with timeout
-  if (process.env.GOOGLE_PRIVATE_KEY) {
-    const key = process.env.GOOGLE_PRIVATE_KEY;
-    console.log(`🔑 偵測到 Private Key, 長度: ${key.length}, 開頭: ${key.substring(0, 30)}...`);
-    if (!key.includes("-----BEGIN PRIVATE KEY-----")) {
-      console.warn("⚠️ Private Key 格式似乎不正確，應包含 '-----BEGIN PRIVATE KEY-----'");
-    }
-  }
-  
-  // Don't block startup for too long on Vercel
-  const initPromise = initializeSheet();
-  if (process.env.VERCEL) {
-    await Promise.race([
-      initPromise,
-      new Promise(resolve => setTimeout(resolve, 5000))
-    ]);
-  } else {
-    await initPromise;
-  }
-
   // API Routes
   app.get("/api/debug", (req, res) => {
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
     res.json({
       env: {
         NODE_ENV: process.env.NODE_ENV,
@@ -199,6 +175,7 @@ async function startServer() {
   });
 
   app.get("/api/config-status", (req, res) => {
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
     res.json({
       hasSheetId: !!SPREADSHEET_ID,
       serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "未設定",
@@ -214,8 +191,12 @@ async function startServer() {
   });
 
   app.get("/api/events", async (req, res) => {
+    // Ensure sheet is initialized on first request
+    await initializeSheet();
+    
     let events: any[] = [];
     let source = "local";
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
     // Priority 1: Google Apps Script
     if (APPS_SCRIPT_URL) {
@@ -236,8 +217,9 @@ async function startServer() {
     }
 
     // Priority 2: Direct Google Sheets API
-    if (SPREADSHEET_ID && sheets) {
+    if (sheetInitStatus.success) {
       try {
+        const sheets = await getSheets();
         // Fetch Main Sheet
         const mainResponse = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
@@ -350,9 +332,11 @@ async function startServer() {
   });
 
   app.post("/api/events", async (req, res) => {
+    await initializeSheet();
     const eventData = req.body;
     const { title, description, start_date, end_date, time, member_name, color, companions } = eventData;
     const eventId = uuidv4(); // Generate a unique ID
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
     const leaveKeywords = ['請假', '排休', '特休', '補休', '公休', '休假'];
     const isLeave = leaveKeywords.some(kw => title.includes(kw));
@@ -403,8 +387,9 @@ async function startServer() {
     }
 
     // Priority 2: Direct Google Sheets API
-    if (SPREADSHEET_ID && sheets) {
+    if (sheetInitStatus.success) {
       try {
+        const sheets = await getSheets();
         // Route to correct sheet
         const targetSheet = isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
         const targetRange = isLeave ? LEAVES_RANGE : RANGE;
@@ -480,9 +465,11 @@ async function startServer() {
   });
 
   app.put("/api/events/:id", async (req, res) => {
+    await initializeSheet();
     const { id } = req.params;
     const eventData = req.body;
     const { title, description, start_date, end_date, time, member_name, color, companions, original_title } = eventData;
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
     // Priority 1: Google Apps Script
     if (APPS_SCRIPT_URL) {
@@ -574,9 +561,10 @@ async function startServer() {
       }
     }
 
-    // Priority 2: Google Sheets API
-    if (SPREADSHEET_ID && sheets) {
+    // Priority 2: Direct Google Sheets API
+    if (sheetInitStatus.success) {
       try {
+        const sheets = await getSheets();
         let targetSheet = MAIN_SHEET_NAME;
         let rowIndex = -1;
 
@@ -707,8 +695,10 @@ async function startServer() {
   });
 
   app.delete("/api/events/:id", async (req, res) => {
+    await initializeSheet();
     const { id } = req.params;
     const { title } = req.query;
+    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
     console.log(`[DELETE] Request received for id: ${id}, title: ${title}`);
     const results: any = { sqlite: null, gas: null, sheets: null };
     let eventDetails: any = null;
@@ -728,8 +718,9 @@ async function startServer() {
     }
 
     // Try Google Sheets if not found in SQLite
-    if (!eventDetails && SPREADSHEET_ID && sheets) {
+    if (!eventDetails && sheetInitStatus.success) {
       try {
+        const sheets = await getSheets();
         let targetSheet = MAIN_SHEET_NAME;
         let rowIndex = -1;
 
@@ -904,8 +895,9 @@ async function startServer() {
     }
 
     // Google Sheets API Deletion
-    if (SPREADSHEET_ID) {
+    if (sheetInitStatus.success) {
       try {
+        const sheets = await getSheets();
         let targetSheet = eventDetails?._sheet;
         let targetRowIndex = eventDetails?._index !== undefined ? eventDetails._index : -1;
         const eventTitle = eventDetails?.title || title;
