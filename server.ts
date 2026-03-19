@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { google } from "googleapis";
 import dotenv from "dotenv";
@@ -103,59 +102,63 @@ async function startServer() {
   const PORT = 3000;
 
   // Initialize SQLite (Optional)
-  try {
-    const Database = (await import("better-sqlite3")).default;
-    const dbPath = process.env.VERCEL ? path.join("/tmp", "family_sync.db") : "family_sync.db";
-    db_local = new Database(dbPath);
-    db_local.exec(`
-      CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL,
-        member_name TEXT NOT NULL,
-        color TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Migration: Add 'time' column if it doesn't exist
+  if (!process.env.VERCEL) {
     try {
-      db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
-      console.log("✅ SQLite 'time' 欄位已成功新增");
-    } catch (error: any) {
-      if (!error.message.includes("duplicate column name")) {
-        console.error("❌ SQLite 遷移失敗 (time):", error.message);
-      }
-    }
+      const Database = (await import("better-sqlite3")).default;
+      const dbPath = "family_sync.db";
+      db_local = new Database(dbPath);
+      db_local.exec(`
+        CREATE TABLE IF NOT EXISTS events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          member_name TEXT NOT NULL,
+          color TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // Migration: Add 'uuid' column if it doesn't exist
-    try {
-      db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
-      console.log("✅ SQLite 'uuid' 欄位已成功新增");
-    } catch (error: any) {
-      if (!error.message.includes("duplicate column name")) {
-        console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+      // Migration: Add 'time' column if it doesn't exist
+      try {
+        db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
+        console.log("✅ SQLite 'time' 欄位已成功新增");
+      } catch (error: any) {
+        if (!error.message.includes("duplicate column name")) {
+          console.error("❌ SQLite 遷移失敗 (time):", error.message);
+        }
       }
-    }
 
-    // Migration: Add 'companions' column if it doesn't exist
-    try {
-      db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
-      console.log("✅ SQLite 'companions' 欄位已成功新增");
-    } catch (error: any) {
-      if (!error.message.includes("duplicate column name")) {
-        console.error("❌ SQLite 遷移失敗 (companions):", error.message);
+      // Migration: Add 'uuid' column if it doesn't exist
+      try {
+        db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
+        console.log("✅ SQLite 'uuid' 欄位已成功新增");
+      } catch (error: any) {
+        if (!error.message.includes("duplicate column name")) {
+          console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+        }
       }
+
+      // Migration: Add 'companions' column if it doesn't exist
+      try {
+        db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
+        console.log("✅ SQLite 'companions' 欄位已成功新增");
+      } catch (error: any) {
+        if (!error.message.includes("duplicate column name")) {
+          console.error("❌ SQLite 遷移失敗 (companions):", error.message);
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ SQLite (better-sqlite3) 不可用，將僅使用 Google Sheets。");
     }
-  } catch (e) {
-    console.warn("⚠️ SQLite (better-sqlite3) 不可用，將僅使用 Google Sheets。");
+  } else {
+    console.log("ℹ️ Vercel 環境：略過 SQLite 初始化以避免 native 模組錯誤。");
   }
 
   app.use(express.json());
 
-  // Initialize sheet on start
+  // Initialize sheet on start with timeout
   if (process.env.GOOGLE_PRIVATE_KEY) {
     const key = process.env.GOOGLE_PRIVATE_KEY;
     console.log(`🔑 偵測到 Private Key, 長度: ${key.length}, 開頭: ${key.substring(0, 30)}...`);
@@ -163,7 +166,17 @@ async function startServer() {
       console.warn("⚠️ Private Key 格式似乎不正確，應包含 '-----BEGIN PRIVATE KEY-----'");
     }
   }
-  await initializeSheet();
+  
+  // Don't block startup for too long on Vercel
+  const initPromise = initializeSheet();
+  if (process.env.VERCEL) {
+    await Promise.race([
+      initPromise,
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ]);
+  } else {
+    await initPromise;
+  }
 
   // API Routes
   app.get("/api/debug", (req, res) => {
@@ -1014,6 +1027,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
