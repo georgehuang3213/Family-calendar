@@ -4,55 +4,58 @@ import path from "path";
 import { google } from "googleapis";
 import dotenv from "dotenv";
 import axios from "axios";
-import Database from "better-sqlite3";
 import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
-// SQLite Setup for fallback/local storage
-const db_local = new Database("family_sync.db");
-db_local.exec(`
-  CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
-    start_date TEXT NOT NULL,
-    end_date TEXT NOT NULL,
-    member_name TEXT NOT NULL,
-    color TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-
-// Migration: Add 'time' column if it doesn't exist
+let db_local: any = null;
 try {
-  db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
-  console.log("✅ SQLite 'time' 欄位已成功新增");
-} catch (error: any) {
-  // If column already exists, it will throw an error which we can ignore
-  if (!error.message.includes("duplicate column name")) {
-    console.error("❌ SQLite 遷移失敗 (time):", error.message);
-  }
-}
+  const Database = (await import("better-sqlite3")).default;
+  db_local = new Database("family_sync.db");
+  db_local.exec(`
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      member_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-// Migration: Add 'uuid' column if it doesn't exist
-try {
-  db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
-  console.log("✅ SQLite 'uuid' 欄位已成功新增");
-} catch (error: any) {
-  if (!error.message.includes("duplicate column name")) {
-    console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+  // Migration: Add 'time' column if it doesn't exist
+  try {
+    db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
+    console.log("✅ SQLite 'time' 欄位已成功新增");
+  } catch (error: any) {
+    if (!error.message.includes("duplicate column name")) {
+      console.error("❌ SQLite 遷移失敗 (time):", error.message);
+    }
   }
-}
 
-// Migration: Add 'companions' column if it doesn't exist
-try {
-  db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
-  console.log("✅ SQLite 'companions' 欄位已成功新增");
-} catch (error: any) {
-  if (!error.message.includes("duplicate column name")) {
-    console.error("❌ SQLite 遷移失敗 (companions):", error.message);
+  // Migration: Add 'uuid' column if it doesn't exist
+  try {
+    db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
+    console.log("✅ SQLite 'uuid' 欄位已成功新增");
+  } catch (error: any) {
+    if (!error.message.includes("duplicate column name")) {
+      console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+    }
   }
+
+  // Migration: Add 'companions' column if it doesn't exist
+  try {
+    db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
+    console.log("✅ SQLite 'companions' 欄位已成功新增");
+  } catch (error: any) {
+    if (!error.message.includes("duplicate column name")) {
+      console.error("❌ SQLite 遷移失敗 (companions):", error.message);
+    }
+  }
+} catch (e) {
+  console.warn("⚠️ SQLite (better-sqlite3) 不可用，將僅使用 Google Sheets。");
 }
 
 // Google Sheets setup (Direct API)
@@ -964,9 +967,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
+  
+  return app;
 }
 
-startServer();
+export const appPromise = startServer();

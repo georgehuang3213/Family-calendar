@@ -16,7 +16,6 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.0.4",
     "axios": "^1.13.6",
-    "better-sqlite3": "^12.8.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
@@ -29,6 +28,9 @@
     "tailwind-merge": "^3.5.0",
     "uuid": "^13.0.0",
     "vite": "^6.2.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.8.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
