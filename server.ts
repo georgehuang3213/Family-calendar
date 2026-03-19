@@ -151,6 +151,25 @@ async function startServer() {
   await initializeSheet();
 
   // API Routes
+  app.get("/api/debug", (req, res) => {
+    res.json({
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        HAS_SHEET_ID: !!process.env.GOOGLE_SHEET_ID,
+        HAS_SERVICE_ACCOUNT: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        HAS_PRIVATE_KEY: !!process.env.GOOGLE_PRIVATE_KEY,
+        HAS_APPS_SCRIPT: !!process.env.GOOGLE_APPS_SCRIPT_URL,
+      },
+      config: {
+        SPREADSHEET_ID,
+        APPS_SCRIPT_URL,
+        RANGE,
+        LEAVES_RANGE
+      }
+    });
+  });
+
   app.get("/api/config-status", (req, res) => {
     res.json({
       hasSheetId: !!SPREADSHEET_ID,

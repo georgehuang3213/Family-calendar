@@ -647,9 +647,26 @@ export default function App() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-6 flex items-center gap-3">
-            <X size={20} />
-            <p className="text-sm font-medium">{error}</p>
+          <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-6 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <X size={20} />
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+            <button 
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-xs text-red-500 underline self-start ml-8"
+            >
+              {showDebug ? '隱藏除錯資訊' : '顯示除錯資訊'}
+            </button>
+            {showDebug && configStatus && (
+              <div className="ml-8 p-3 bg-white/50 rounded-lg text-[10px] font-mono space-y-1">
+                <p>Google Sheet ID: {configStatus.hasSheetId ? '✅ 已設定' : '❌ 未設定'}</p>
+                <p>Service Account: {configStatus.serviceAccountEmail}</p>
+                <p>Private Key: {configStatus.hasPrivateKey ? '✅ 已設定' : '❌ 未設定'}</p>
+                <p>Apps Script URL: {configStatus.hasAppsScript ? '✅ 已設定' : '❌ 未設定'}</p>
+                <p className="mt-2 text-stone-400">提示：請在 Vercel 專案設定中新增這些環境變數。</p>
+              </div>
+            )}
           </div>
         )}
 
