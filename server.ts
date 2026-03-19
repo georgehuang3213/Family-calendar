@@ -23,8 +23,9 @@ async function getSheets() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   let key = process.env.GOOGLE_PRIVATE_KEY;
   
+  // 如果缺少任何一個，就回傳 null 而不是拋出錯誤
   if (!email || !key || !SPREADSHEET_ID) {
-    throw new Error("缺少 Google Sheets 必要設定 (Email, Key 或 ID)");
+    return null;
   }
   
   try {
@@ -42,7 +43,7 @@ async function getSheets() {
     return sheetsInstance;
   } catch (err: any) {
     console.error("Google Auth Error:", err.message);
-    throw err;
+    return null;
   }
 }
 
@@ -51,8 +52,23 @@ let sheetInitStatus = { success: false, error: null as string | null, initialize
 async function initializeSheet() {
   if (sheetInitStatus.initialized) return;
   
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const key = process.env.GOOGLE_PRIVATE_KEY;
+  
+  // 如果沒有設定憑證，直接標記為初始化完成但失敗，不執行後續邏輯
+  if (!email || !key || !SPREADSHEET_ID) {
+    console.log("ℹ️ 未偵測到 Google Sheets 憑證，將跳過直接連線模式。");
+    sheetInitStatus = { success: false, error: "缺少憑證", initialized: true };
+    return;
+  }
+  
   try {
     const sheets = await getSheets();
+    if (!sheets) {
+      sheetInitStatus = { success: false, error: "無法建立 Sheets 實例", initialized: true };
+      return;
+    }
+    
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
     const sheetsList = spreadsheet.data.sheets || [];
     const sheetNames = sheetsList.map((s: any) => s.properties?.title) || [];
@@ -195,16 +211,17 @@ async function startServer() {
     await initializeSheet();
     
     let events: any[] = [];
-    let source = "local";
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+    let appsScriptWarning: string | undefined = undefined;
 
     // Priority 1: Google Apps Script
     if (APPS_SCRIPT_URL) {
       try {
-        const response = await axios.get(APPS_SCRIPT_URL);
+        console.log("Fetching events from Apps Script...");
+        const response = await axios.get(APPS_SCRIPT_URL, { timeout: 10000 });
         
         if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-          throw new Error("Apps Script 發生錯誤，請檢查 Apps Script 內的試算表 ID 是否正確設定。");
+          throw new Error("Apps Script 傳回了 HTML 而非 JSON，請檢查 Apps Script 是否已正確部署為「網頁應用程式」並設定為「任何人」皆可存取。");
         }
         
         if (Array.isArray(response.data)) {
@@ -212,14 +229,16 @@ async function startServer() {
         }
       } catch (error: any) {
         console.error("Apps Script Fetch Error:", error.message);
-        var appsScriptWarning = error.message;
+        appsScriptWarning = error.message;
       }
     }
 
-    // Priority 2: Direct Google Sheets API
+    // Priority 2: Direct Google Sheets API (Only if initialized successfully)
     if (sheetInitStatus.success) {
       try {
         const sheets = await getSheets();
+        if (!sheets) throw new Error("Sheets instance not available");
+        
         // Fetch Main Sheet
         const mainResponse = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
@@ -335,8 +354,15 @@ async function startServer() {
     await initializeSheet();
     const eventData = req.body;
     const { title, description, start_date, end_date, time, member_name, color, companions } = eventData;
-    const eventId = uuidv4(); // Generate a unique ID
+    const eventId = uuidv4(); 
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+
+    if (!APPS_SCRIPT_URL && !sheetInitStatus.success) {
+      return res.status(400).json({ 
+        error: "儲存失敗：未設定 Google Apps Script URL 且 Google Sheets API 憑證無效或缺失。",
+        debug: { sheetInitStatus }
+      });
+    }
 
     const leaveKeywords = ['請假', '排休', '特休', '補休', '公休', '休假'];
     const isLeave = leaveKeywords.some(kw => title.includes(kw));
@@ -344,45 +370,29 @@ async function startServer() {
     // Priority 1: Google Apps Script
     if (APPS_SCRIPT_URL) {
       try {
+        console.log("Saving event to Apps Script...");
         const response = await axios.post(APPS_SCRIPT_URL, {
           ...eventData,
           action: eventData.action || 'create',
-          id: eventId, // Pass the generated ID
+          id: eventId,
           isLeave: isLeave,
           targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
-        }, { timeout: 8000 }); // 8 second timeout
+        }, { timeout: 12000 });
         
-        // Check if response is actually JSON and not an HTML error page
         if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-          throw new Error("Apps Script 發生錯誤，請檢查 Apps Script 內的試算表 ID 是否正確設定。");
+          throw new Error("Apps Script 傳回了 HTML 而非 JSON。");
         }
         
         if (response.data && response.data.error) {
           throw new Error(response.data.error);
         }
         
-        let finalId = response.data?.id || eventId;
-        
-        // If Apps Script didn't return an ID, just use our generated one to save time
-        // The sync to SQLite will use this ID
-        
-        // Update local SQLite as well to keep it in sync
-        try {
-          if (db_local) {
-            const stmt = db_local.prepare(`
-              INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            stmt.run(finalId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "");
-          }
-        } catch (e) {
-          console.error("SQLite Insert Error (Sync):", e);
-        }
-        
-        return res.json({ success: true, source: "google_apps_script", target: isLeave ? "leaves" : "main", id: finalId });
+        return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
       } catch (error: any) {
-        console.error("Apps Script Save Error, falling back to Sheets API:", error.message);
-        var appsScriptWarning = error.message;
+        console.error("Apps Script Save Error:", error.message);
+        if (!sheetInitStatus.success) {
+          return res.status(500).json({ error: "Apps Script 儲存失敗且無 Sheets API 備援: " + error.message });
+        }
       }
     }
 
@@ -390,6 +400,7 @@ async function startServer() {
     if (sheetInitStatus.success) {
       try {
         const sheets = await getSheets();
+        if (!sheets) throw new Error("Sheets instance not available");
         // Route to correct sheet
         const targetSheet = isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
         const targetRange = isLeave ? LEAVES_RANGE : RANGE;
