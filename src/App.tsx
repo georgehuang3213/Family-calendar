@@ -78,17 +78,17 @@ const HOLIDAYS_2026: Record<string, string> = {
 };
 
 const MEMBER_COLORS: Record<string, string> = {
-  '全家': '#4F46E5', // Indigo
+  '全家': '#111827', // Dark Gray / Black
   '江雪卿': '#E11D48', // Rose
-  '黃喬裕': '#10B981', // Emerald
-  '陳愉婷': '#F59E0B', // Amber
-  '黃宣綾': '#0EA5E9', // Sky
-  '黃宣綸': '#8B5CF6', // Violet
-  '黃郁婷': '#EC4899', // Pink
-  '郭力維': '#06B6D4', // Cyan
-  '黃郁慈': '#F97316', // Orange
-  '郭品佑': '#84CC16', // Lime
-  '郭品彤': '#6366F1', // Indigo-500
+  '黃喬裕': '#2563EB', // Blue
+  '陳愉婷': '#16A34A', // Green
+  '黃宣綾': '#D97706', // Amber
+  '黃宣綸': '#9333EA', // Purple
+  '黃郁婷': '#0891B2', // Cyan
+  '郭力維': '#BE185D', // Pink/Magenta
+  '黃郁慈': '#EA580C', // Orange
+  '郭品佑': '#65A30D', // Lime/Olive
+  '郭品彤': '#0D9488', // Teal
 };
 const COLORS = [
   { name: 'Indigo', value: '#4F46E5' },
@@ -160,7 +160,7 @@ export default function App() {
       time: '',
       member_name: member,
       color: eventColor,
-      action: 'create', // 明確加入 action
+      action: 'create',
     };
 
     const tempId = Date.now();
@@ -168,7 +168,7 @@ export default function App() {
     
     const previousEvents = [...events];
     setEvents([...events, optimisticEvent]);
-    showToast('已快速新增排休');
+    showToast(`已快速新增 ${member} 排休`);
     setIsDayModalOpen(false);
 
     try {
@@ -189,7 +189,6 @@ export default function App() {
 
       if (!res.ok) throw new Error(result.error || '快速新增失敗');
       
-      // Update the optimistic event with the real ID from the backend
       if (result.id) {
         setEvents(prev => prev.map(e => String(e.id) === String(tempId) ? { ...e, id: result.id } : e));
       }
@@ -310,6 +309,14 @@ export default function App() {
       }
       
       const s = String(t);
+      if (s.includes('T')) {
+        try {
+          const date = new Date(s);
+          if (!isNaN(date.getTime())) {
+            return format(date, 'HH:mm');
+          }
+        } catch (e) {}
+      }
       // 處理 "14:30:00" -> "14:30"
       if (s.match(/^\d{2}:\d{2}:\d{2}$/)) {
         return s.substring(0, 5);
@@ -352,6 +359,10 @@ export default function App() {
     const previousEvents = [...events];
     setIsDeleteModalOpen(false);
     
+    // Optimistic update
+    setEvents(events.filter(e => e.id !== eventToDelete));
+    showToast('活動已刪除');
+    
     try {
       // 使用 DELETE 方法並將 title 放入 query string
       const res = await fetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(eventToDeleteObj.title)}`, {
@@ -364,8 +375,7 @@ export default function App() {
       const result = await res.json();
       if (!result.success) throw new Error(result.error || '刪除失敗');
       
-      showToast('活動已刪除');
-      fetchEvents(true);
+      fetchEvents(false);
     } catch (err: any) {
       setEvents(previousEvents);
       showToast(`刪除失敗: ${err.message}`, 'error');
@@ -374,12 +384,38 @@ export default function App() {
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     const eventColor = MEMBER_COLORS[newEvent.member_name] || '#4F46E5';
+    const isEditing = !!editingEventId;
     
-    // 顯示載入中
-    showToast('正在儲存...');
+    const optimisticEvent = {
+      ...newEvent,
+      id: isEditing ? editingEventId : Date.now().toString(),
+      color: eventColor
+    };
+
+    const previousEvents = [...events];
+    
+    // Optimistic update
+    if (isEditing) {
+      setEvents(events.map(ev => ev.id === editingEventId ? optimisticEvent : ev));
+    } else {
+      setEvents([...events, optimisticEvent]);
+    }
+
+    // 關閉視窗並重置
+    setIsModalOpen(false);
+    setEditingEventId(null);
+    setNewEvent({
+      title: '',
+      description: '',
+      start_date: format(new Date(), 'yyyy-MM-dd'),
+      end_date: format(new Date(), 'yyyy-MM-dd'),
+      time: '',
+      member_name: FAMILY_MEMBERS[0],
+      color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+    });
+    showToast(isEditing ? '活動已更新' : '活動已儲存');
 
     try {
-      const isEditing = !!editingEventId;
       const url = isEditing ? `/api/events/${editingEventId}` : '/api/events';
       const method = isEditing ? 'PUT' : 'POST';
       
@@ -404,24 +440,16 @@ export default function App() {
 
       if (!res.ok) throw new Error(result.error || '儲存失敗');
       
-      // 成功後，直接重新抓取最新資料，這會包含後端產生的 UUID
-      await fetchEvents(true);
+      // Update with real ID if it was a create
+      if (!isEditing && result.id) {
+        setEvents(prev => prev.map(ev => ev.id === optimisticEvent.id ? { ...ev, id: result.id } : ev));
+      }
       
-      // 關閉視窗並重置
-      setIsModalOpen(false);
-      setEditingEventId(null);
-      setNewEvent({
-        title: '',
-        description: '',
-        start_date: format(new Date(), 'yyyy-MM-dd'),
-        end_date: format(new Date(), 'yyyy-MM-dd'),
-        time: '',
-        member_name: FAMILY_MEMBERS[0],
-        color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
-      });
-      showToast(isEditing ? '活動已更新' : '活動已儲存');
+      // 成功後，在背景重新抓取最新資料
+      fetchEvents(false);
       
     } catch (err: any) {
+      setEvents(previousEvents);
       showToast(`儲存失敗: ${err.message}`, 'error');
     }
   };
@@ -444,6 +472,23 @@ export default function App() {
       const native = new Date(normalizedDate);
       return isNaN(native.getTime()) ? new Date() : native;
     }
+  };
+
+  const formatTimeDisplay = (timeStr: string | undefined | null) => {
+    if (!timeStr) return '';
+    const s = String(timeStr);
+    if (s.includes('T')) {
+      try {
+        const date = new Date(s);
+        if (!isNaN(date.getTime())) {
+          return format(date, 'HH:mm');
+        }
+      } catch (e) {}
+    }
+    if (s.match(/^\d{2}:\d{2}:\d{2}$/)) {
+      return s.substring(0, 5);
+    }
+    return s;
   };
 
   const monthStart = startOfMonth(currentDate);
@@ -611,48 +656,46 @@ export default function App() {
                   key={member}
                   onClick={() => setFilterMember(member)}
                   className={cn(
-                    "flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all border",
+                    "flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5",
                     filterMember === member 
-                      ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100" 
+                      ? "bg-stone-800 border-stone-800 text-white shadow-md" 
                       : "bg-white border-stone-200 text-stone-600 hover:border-stone-300"
                   )}
                 >
+                  {member !== '全部' && (
+                    <div 
+                      className="w-2 h-2 rounded-full" 
+                      style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} 
+                    />
+                  )}
                   {member}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Quick Add Toggle */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white border border-stone-200 px-3 py-1.5 rounded-xl shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Zap size={12} className={cn(isQuickLeaveEnabled ? "text-rose-500 fill-rose-500" : "text-stone-300")} />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-stone-500">一鍵排休</span>
-                </div>
-                <button 
-                  onClick={() => setIsQuickLeaveEnabled(!isQuickLeaveEnabled)}
-                  className={cn(
-                    "relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none",
-                    isQuickLeaveEnabled ? "bg-rose-500" : "bg-stone-200"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform",
-                      isQuickLeaveEnabled ? "translate-x-4.5" : "translate-x-1"
-                    )}
-                  />
-                </button>
-              </div>
-              
               <button 
                 onClick={() => setShowDebug(!showDebug)}
                 className="p-1.5 text-stone-400 hover:text-stone-600 transition-colors"
                 title="偵錯資訊"
               >
                 <Info size={16} />
+              </button>
+
+              {/* 一鍵排休開關 */}
+              <button
+                onClick={() => setIsQuickLeaveEnabled(!isQuickLeaveEnabled)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
+                  isQuickLeaveEnabled 
+                    ? "bg-amber-100 text-amber-700 border border-amber-200 shadow-sm"
+                    : "bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200"
+                )}
+              >
+                <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
+                一鍵排休
               </button>
             </div>
 
@@ -844,17 +887,6 @@ export default function App() {
                     </div>
                     
                     <div className="flex flex-col gap-0.5 md:gap-1 overflow-hidden">
-                      {/* Mobile View: Dots for many events */}
-                      <div className="flex flex-wrap gap-0.5 md:hidden mb-0.5">
-                        {dayEvents.map(event => (
-                          <div 
-                            key={event.id}
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ backgroundColor: event.color || '#4F46E5' }}
-                          />
-                        ))}
-                      </div>
-
                       {/* Desktop View: Badges with Icons */}
                       <div className="hidden md:flex flex-col gap-1">
                         {dayEvents.slice(0, 4).map(event => {
@@ -910,6 +942,11 @@ export default function App() {
                             </div>
                           );
                         })}
+                        {dayEvents.length > 2 && (
+                          <div className="text-[8px] text-stone-400 font-black pl-1 flex items-center gap-0.5">
+                            <Plus size={6} /> {dayEvents.length - 2}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -919,30 +956,34 @@ export default function App() {
           </div>
         )}
 
+        {/* 一鍵排休區塊 */}
+        {viewMode === 'calendar' && isQuickLeaveEnabled && (
+          <div className="mt-4 bg-white border border-amber-200 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap size={16} className="text-amber-500" />
+              <h3 className="text-xs font-black text-stone-700 uppercase tracking-widest">
+                快速新增排休 ({format(selectedDay, 'MM/dd')})
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {FAMILY_MEMBERS.map(member => (
+                <button
+                  key={member}
+                  onClick={() => handleQuickLeave(member)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white hover:bg-stone-50"
+                  style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
+                >
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                  {member}排休
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Upcoming Events (Below Calendar) */}
         {viewMode === 'calendar' && (
           <div className="mt-8 md:mt-10">
-            {/* Quick Add Leave Section */}
-            {isQuickLeaveEnabled && (
-              <div className="mb-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                <div className="flex items-center gap-2 mb-3">
-                  <Zap size={14} className="text-rose-500 fill-rose-500" />
-                  <h3 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">快速新增排休 ({format(selectedDay, 'MM/dd')})</h3>
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-                  {FAMILY_MEMBERS.slice(1).map(member => (
-                    <button 
-                      key={member}
-                      onClick={() => handleQuickLeave(member)}
-                      className="flex-shrink-0 px-4 py-2 bg-white border border-stone-200 rounded-xl text-[11px] font-bold text-stone-700 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50 transition-all shadow-sm active:scale-95"
-                    >
-                      {member}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm md:text-base font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
                 <div className="w-1 h-5 bg-emerald-500 rounded-full" />
@@ -969,7 +1010,8 @@ export default function App() {
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                           {getEventIcon(event.title || '', 16) || <User size={16} />}
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                           {event.member_name}
                         </span>
                       </div>
@@ -983,7 +1025,7 @@ export default function App() {
                       {event.time && (
                         <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50/50 px-2 py-1 rounded-lg">
                           <Clock size={14} />
-                          {event.time}
+                          {formatTimeDisplay(event.time)}
                         </div>
                       )}
                       {event.description && (
@@ -1021,7 +1063,8 @@ export default function App() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full inline-block" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                                 {event.member_name}
                               </span>
                               <div className="flex items-center gap-2">
@@ -1043,7 +1086,7 @@ export default function App() {
                             <div className="flex items-center gap-2 mt-1">
                               {event.time && (
                                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                  <Clock size={10} /> {event.time}
+                                  <Clock size={10} /> {formatTimeDisplay(event.time)}
                                 </span>
                               )}
                               {event.description && <p className="text-xs text-stone-500">{event.description}</p>}
@@ -1119,26 +1162,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Mobile Floating Action Button */}
-      <button 
-        onClick={() => {
-          setEditingEventId(null);
-          setNewEvent({
-            title: '',
-            description: '',
-            start_date: format(new Date(), 'yyyy-MM-dd'),
-            end_date: format(new Date(), 'yyyy-MM-dd'),
-            time: '',
-            member_name: FAMILY_MEMBERS[0],
-            color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
-          });
-          setIsModalOpen(true);
-        }}
-        className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform"
-      >
-        <Plus size={28} />
-      </button>
-
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
@@ -1171,12 +1194,12 @@ export default function App() {
       {/* Add Event Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-50 flex items-end md:items-center justify-center p-0 md:p-4">
-          <div className="bg-white rounded-t-3xl md:rounded-2xl shadow-2xl w-full max-w-[280px] overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300">
-            <div className="px-3 py-1.5 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+          <div className="bg-white rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300 max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50 shrink-0">
               <div className="flex flex-col">
-                <h2 className="text-xs font-black tracking-tight">{editingEventId ? '編輯活動' : '新增活動'}</h2>
+                <h2 className="text-base md:text-lg font-black tracking-tight">{editingEventId ? '編輯活動' : '新增活動'}</h2>
                 {editingEventId && (
-                  <span className="text-[8px] text-stone-400 font-medium">
+                  <span className="text-[10px] text-stone-400 font-medium mt-0.5">
                     原始日期: {newEvent.start_date}
                   </span>
                 )}
@@ -1186,124 +1209,137 @@ export default function App() {
                   setIsModalOpen(false);
                   setEditingEventId(null);
                 }} 
-                className="w-6 h-6 flex items-center justify-center bg-stone-200 rounded-full text-stone-600 hover:bg-stone-300 transition-colors"
+                className="w-8 h-8 flex items-center justify-center bg-stone-200 rounded-full text-stone-600 hover:bg-stone-300 transition-colors"
               >
-                <X size={14} />
+                <X size={18} />
               </button>
             </div>
             
-            <form onSubmit={handleAddEvent} className="p-3 space-y-1.5">
-              <div>
-                <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">活動名稱</label>
-                <input 
-                  required
-                  type="text" 
-                  value={newEvent.title}
-                  onChange={e => setNewEvent({...newEvent, title: e.target.value})}
-                  className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-xs font-medium"
-                  placeholder="例如：家族聚餐"
-                />
-              </div>
-
-              <div className={cn("grid gap-2", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) ? "grid-cols-2" : "grid-cols-1")}>
+            <div className="overflow-y-auto p-5">
+              <form onSubmit={handleAddEvent} className="space-y-4">
                 <div>
-                  <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">日期</label>
+                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">活動名稱</label>
                   <input 
                     required
-                    type="date" 
-                    value={newEvent.start_date}
-                    onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
-                    className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-xs font-medium"
+                    type="text" 
+                    value={newEvent.title}
+                    onChange={e => setNewEvent({...newEvent, title: e.target.value})}
+                    className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                    placeholder="例如：家族聚餐"
                   />
                 </div>
-                {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
+
+                <div className={cn("grid gap-3", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) ? "grid-cols-2" : "grid-cols-1")}>
                   <div>
-                    <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">結束日期</label>
+                    <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">日期</label>
                     <input 
                       required
                       type="date" 
-                      value={newEvent.end_date}
-                      onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
-                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-xs font-medium"
+                      value={newEvent.start_date}
+                      onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
+                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                  {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
+                    <div>
+                      <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">結束日期</label>
+                      <input 
+                        required
+                        type="date" 
+                        value={newEvent.end_date}
+                        onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
+                  <div>
+                    <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">時間 (選填)</label>
+                    <input 
+                      type="time" 
+                      value={newEvent.time}
+                      onChange={e => setNewEvent({...newEvent, time: e.target.value})}
+                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
                     />
                   </div>
                 )}
-              </div>
 
-              {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
                 <div>
-                  <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">時間 (選填)</label>
-                  <input 
-                    type="time" 
-                    value={newEvent.time}
-                    onChange={e => setNewEvent({...newEvent, time: e.target.value})}
-                    className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-xs font-medium"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">參與成員</label>
-                <div className="relative">
-                  <select 
-                    value={newEvent.member_name}
-                    onChange={e => setNewEvent({...newEvent, member_name: e.target.value, color: MEMBER_COLORS[e.target.value]})}
-                    className="w-full appearance-none bg-stone-50 border border-stone-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all pr-8"
-                  >
-                    {FAMILY_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400">
-                    <ChevronDown size={14} />
+                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">參與成員</label>
+                  <div className="flex flex-wrap gap-2">
+                    {FAMILY_MEMBERS.map(member => (
+                      <button
+                        key={member}
+                        type="button"
+                        onClick={() => setNewEvent({...newEvent, member_name: member, color: MEMBER_COLORS[member] || '#4F46E5'})}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
+                          newEvent.member_name === member
+                            ? "bg-stone-800 text-white border-stone-800 shadow-sm"
+                            : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                        )}
+                      >
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                        {member}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">隨行人員 (選填)</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {FAMILY_MEMBERS.map(member => (
-                    <button
-                      key={member}
-                      type="button"
-                      onClick={() => {
-                        const companions = newEvent.companions ? newEvent.companions.split(',') : [];
-                        if (companions.includes(member)) {
-                          setNewEvent({...newEvent, companions: companions.filter(c => c !== member).join(',')});
-                        } else {
-                          setNewEvent({...newEvent, companions: [...companions, member].join(',')});
-                        }
-                      }}
-                      className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${
-                        (newEvent.companions ? newEvent.companions.split(',') : []).includes(member)
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : 'bg-stone-100 text-stone-600 border border-stone-200'
-                      }`}
-                    >
-                      {member}
-                    </button>
-                  ))}
+                <div>
+                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">隨行人員 (選填)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {FAMILY_MEMBERS.map(member => {
+                      const isSelected = (newEvent.companions ? newEvent.companions.split(',') : []).includes(member);
+                      return (
+                        <button
+                          key={member}
+                          type="button"
+                          onClick={() => {
+                            const companions = newEvent.companions ? newEvent.companions.split(',') : [];
+                            if (companions.includes(member)) {
+                              setNewEvent({...newEvent, companions: companions.filter(c => c !== member).join(',')});
+                            } else {
+                              setNewEvent({...newEvent, companions: [...companions, member].join(',')});
+                            }
+                          }}
+                          className={cn(
+                            "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
+                            isSelected
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm"
+                              : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                          )}
+                        >
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                          {member}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">備註 (選填)</label>
-                <textarea 
-                  value={newEvent.description}
-                  onChange={e => setNewEvent({...newEvent, description: e.target.value})}
-                  className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[60px] text-xs font-medium resize-none"
-                  placeholder="活動細節..."
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">備註 (選填)</label>
+                  <textarea 
+                    value={newEvent.description}
+                    onChange={e => setNewEvent({...newEvent, description: e.target.value})}
+                    className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[80px] text-sm font-medium resize-none"
+                    placeholder="活動細節..."
+                  />
+                </div>
 
-              <div className="pt-1">
-                <button 
-                  type="submit"
-                  className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-100"
-                >
-                  {editingEventId ? '更新活動' : '儲存活動'}
-                </button>
-              </div>
-            </form>
+                <div className="pt-2 pb-6 md:pb-2">
+                  <button 
+                    type="submit"
+                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200"
+                  >
+                    {editingEventId ? '更新活動' : '儲存活動'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -1363,7 +1399,8 @@ export default function App() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                             {event.member_name}
                           </span>
                           <div className="flex items-center gap-1">
@@ -1392,7 +1429,7 @@ export default function App() {
                           {event.time && (
                             <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-50/50 px-1.5 py-0.5 rounded-md">
                               <Clock size={12} />
-                              {event.time}
+                              {formatTimeDisplay(event.time)}
                             </div>
                           )}
                           {event.description && (
