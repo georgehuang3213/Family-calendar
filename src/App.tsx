@@ -979,7 +979,7 @@ export default function App() {
                       )}
                     </div>
                     
-                    <div className="flex flex-col gap-0.5 md:gap-1 overflow-hidden relative z-20">
+                    <div className="flex flex-col gap-0.5 md:gap-1 relative z-20">
                       {/* Desktop View: Badges with Icons */}
                       <div className="hidden md:flex flex-col gap-1">
                         {dayEvents.slice(0, 4).map(event => {
@@ -1015,9 +1015,10 @@ export default function App() {
                                 borderTopRightRadius: isEnd || !isMultiDay ? '4px' : '0',
                                 borderBottomRightRadius: isEnd || !isMultiDay ? '4px' : '0',
                                 // Add negative margin to connect bars across cells
-                                marginLeft: isStart || !isMultiDay ? '0' : '-8px',
-                                marginRight: isEnd || !isMultiDay ? '0' : '-8px',
+                                marginLeft: isStart || !isMultiDay ? '0' : '-9px',
+                                marginRight: isEnd || !isMultiDay ? '0' : '-9px',
                                 paddingLeft: isStart || !isMultiDay ? '6px' : '10px',
+                                paddingRight: isEnd || !isMultiDay ? '6px' : '10px',
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
@@ -1025,9 +1026,8 @@ export default function App() {
                                 isLeave && "ring-1 ring-inset ring-white/20"
                               )}
                             >
-                              {(isStart || !isMultiDay) && icon && <span className="shrink-0">{icon}</span>}
-                              {(isStart || !isMultiDay) && <span className="truncate">{eventTitle}</span>}
-                              {(!isStart && isMultiDay) && <span className="opacity-0">{eventTitle}</span>} {/* Invisible text to maintain height */}
+                              {icon && <span className="shrink-0">{icon}</span>}
+                              <span className="truncate">{eventTitle}</span>
                             </div>
                           );
                         })}
@@ -1063,15 +1063,15 @@ export default function App() {
                                 borderBottomLeftRadius: isStart || !isMultiDay ? '2px' : '0',
                                 borderTopRightRadius: isEnd || !isMultiDay ? '2px' : '0',
                                 borderBottomRightRadius: isEnd || !isMultiDay ? '2px' : '0',
-                                marginLeft: isStart || !isMultiDay ? '0' : '-4px',
-                                marginRight: isEnd || !isMultiDay ? '0' : '-4px',
+                                marginLeft: isStart || !isMultiDay ? '0' : '-5px',
+                                marginRight: isEnd || !isMultiDay ? '0' : '-5px',
                                 paddingLeft: isStart || !isMultiDay ? '4px' : '6px',
+                                paddingRight: isEnd || !isMultiDay ? '4px' : '6px',
                               }}
                               className="py-0 text-[8px] font-black truncate flex items-center gap-0.5 cursor-grab active:cursor-grabbing"
                             >
-                              {(isStart || !isMultiDay) && icon && <span className="shrink-0">{icon}</span>}
-                              {(isStart || !isMultiDay) && <span className="truncate">{eventTitle}</span>}
-                              {(!isStart && isMultiDay) && <span className="opacity-0">{eventTitle}</span>}
+                              {icon && <span className="shrink-0">{icon}</span>}
+                              <span className="truncate">{eventTitle}</span>
                             </div>
                           );
                         })}
