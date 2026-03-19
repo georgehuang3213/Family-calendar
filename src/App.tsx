@@ -177,7 +177,16 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leaveEvent)
       });
-      const result = await res.json();
+      
+      const contentType = res.headers.get("content-type");
+      let result;
+      if (contentType && contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`伺服器傳回非 JSON 回應: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
+      }
+
       if (!res.ok) throw new Error(result.error || '快速新增失敗');
       
       // Update the optimistic event with the real ID from the backend
@@ -373,7 +382,15 @@ export default function App() {
         })
       });
       
-      const result = await res.json();
+      const contentType = res.headers.get("content-type");
+      let result;
+      if (contentType && contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`伺服器傳回非 JSON 回應: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
+      }
+
       if (!res.ok) throw new Error(result.error || '儲存失敗');
       
       // 成功後，直接重新抓取最新資料，這會包含後端產生的 UUID

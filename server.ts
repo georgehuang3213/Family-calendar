@@ -316,7 +316,7 @@ async function startServer() {
       } else {
         res.status(500).json({ 
           error: "無法取得活動資料。請確認環境變數 (GOOGLE_SHEET_ID 或 GOOGLE_APPS_SCRIPT_URL) 已正確設定。",
-          warning: appsScriptWarning
+          warning: typeof appsScriptWarning !== 'undefined' ? appsScriptWarning : undefined
         });
       }
     } catch (error: any) {
@@ -341,7 +341,7 @@ async function startServer() {
           id: eventId, // Pass the generated ID
           isLeave: isLeave,
           targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
-        });
+        }, { timeout: 8000 }); // 8 second timeout
         
         // Check if response is actually JSON and not an HTML error page
         if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
@@ -354,25 +354,8 @@ async function startServer() {
         
         let finalId = response.data?.id || eventId;
         
-        // If Apps Script didn't return an ID, try to fetch it to get the SheetName-RowIndex ID
-        if (!response.data?.id) {
-          try {
-            const getResponse = await axios.get(APPS_SCRIPT_URL);
-            if (Array.isArray(getResponse.data)) {
-              // Find the event we just created (search from the end since it was appended)
-              const newEvent = [...getResponse.data].reverse().find((e: any) => 
-                e.title === title && 
-                e.start_date === start_date && 
-                e.member_name === member_name
-              );
-              if (newEvent && newEvent.id) {
-                finalId = newEvent.id;
-              }
-            }
-          } catch (e) {
-            console.error("Failed to fetch new ID from Apps Script:", e);
-          }
-        }
+        // If Apps Script didn't return an ID, just use our generated one to save time
+        // The sync to SQLite will use this ID
         
         // Update local SQLite as well to keep it in sync
         try {
@@ -420,11 +403,12 @@ async function startServer() {
           if (header === 'time') return time || "";
           if (header === 'membername') return member_name;
           if (header === 'color') return color;
+          if (header === 'companions') return companions || "";
           return "";
         });
 
         // If no headers found or mapping failed, use default order
-        const finalRow = newRow.length > 0 ? newRow : [eventId, title, description, start_date, end_date, time || "", member_name, color];
+        const finalRow = newRow.length > 0 ? newRow : [eventId, title, description, start_date, end_date, time || "", member_name, color, companions || ""];
         
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
@@ -446,10 +430,10 @@ async function startServer() {
     try {
       if (db_local) {
         const stmt = db_local.prepare(`
-          INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color);
+        stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "");
         
         let warningMsg = undefined;
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
@@ -458,7 +442,7 @@ async function startServer() {
       } else {
         return res.status(500).json({ 
           error: "儲存失敗：Google 試算表未設定且本地資料庫不可用。",
-          details: sheetsWarning 
+          details: typeof sheetsWarning !== 'undefined' ? sheetsWarning : undefined
         });
       }
     } catch (error: any) {
@@ -511,27 +495,27 @@ async function startServer() {
           delete updatePayload.id; // Ensure it's not in ...eventData
         }
 
-        let response = await axios.post(APPS_SCRIPT_URL, updatePayload);
+        let response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 8000 });
         
         // Fallback 1: Try the other sheet
         if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
           const fallbackSheet = targetSheet === MAIN_SHEET_NAME ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
           console.log(`ID not found in ${targetSheet}, retrying in ${fallbackSheet}`);
           updatePayload.sheet = fallbackSheet;
-          response = await axios.post(APPS_SCRIPT_URL, updatePayload);
+          response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
           
           // Fallback 2: Try with id = title (in case Apps Script assumes ID is in column A, which is actually title)
           if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
             console.log(`ID still not found, retrying with id = title in ${targetSheet}`);
             updatePayload.sheet = targetSheet;
             updatePayload.id = original_title || title;
-            response = await axios.post(APPS_SCRIPT_URL, updatePayload);
+            response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
             
             // Fallback 3: Try with id = title in the other sheet
             if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
               console.log(`ID still not found, retrying with id = title in ${fallbackSheet}`);
               updatePayload.sheet = fallbackSheet;
-              response = await axios.post(APPS_SCRIPT_URL, updatePayload);
+              response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
             }
           }
         }
@@ -652,11 +636,12 @@ async function startServer() {
             if (header === 'time') return time || "";
             if (header === 'membername') return member_name;
             if (header === 'color') return color;
+            if (header === 'companions') return companions || "";
             return "";
           });
 
           // If mapping failed, use default order
-          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color];
+          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color, companions || ""];
 
           await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
@@ -678,17 +663,17 @@ async function startServer() {
       if (db_local) {
         const stmt = db_local.prepare(`
           UPDATE events 
-          SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?
+          SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?
           WHERE uuid = ? OR id = ?
         `);
-        const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, id, id);
+        const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
         if (result.changes > 0) {
-          res.json({ success: true, source: "local", warning: appsScriptUpdateWarning });
+          res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         } else {
-          res.status(404).json({ error: "Event not found", warning: appsScriptUpdateWarning });
+          res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         }
       } else {
-        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。", warning: appsScriptUpdateWarning });
+        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
       }
     } catch (error: any) {
       console.error("SQLite Update Error:", error.message);
@@ -852,27 +837,27 @@ async function startServer() {
 
         console.log("Sending delete request to Apps Script:", deletePayload);
 
-        let response = await axios.post(APPS_SCRIPT_URL, deletePayload);
+        let response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 8000 });
         
         // Fallback 1: Try the other sheet
         if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
           const fallbackSheet = targetSheet === MAIN_SHEET_NAME ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
           console.log(`ID not found in ${targetSheet}, retrying delete in ${fallbackSheet}`);
           deletePayload.sheet = fallbackSheet;
-          response = await axios.post(APPS_SCRIPT_URL, deletePayload);
+          response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
           
           // Fallback 2: Try with id = title (in case Apps Script assumes ID is in column A, which is actually title)
           if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
             console.log(`ID still not found, retrying with id = title in ${targetSheet}`);
             deletePayload.sheet = targetSheet;
             deletePayload.id = eventTitle;
-            response = await axios.post(APPS_SCRIPT_URL, deletePayload);
+            response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
             
             // Fallback 3: Try with id = title in the other sheet
             if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
               console.log(`ID still not found, retrying with id = title in ${fallbackSheet}`);
               deletePayload.sheet = fallbackSheet;
-              response = await axios.post(APPS_SCRIPT_URL, deletePayload);
+              response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
             }
           }
         }
@@ -1004,6 +989,15 @@ async function startServer() {
     }
 
     res.json({ success: true, results });
+  });
+
+  // Global error handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Unhandled Error:", err);
+    res.status(500).json({
+      error: "伺服器發生未預期錯誤",
+      details: err.message || String(err)
+    });
   });
 
   // Vite middleware for development
