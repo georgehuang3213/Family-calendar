@@ -30,6 +30,8 @@ import {
   Zap,
   CheckCircle2,
   Info,
+  Sun,
+  Moon,
   AlertTriangle,
   Utensils,
   Coffee,
@@ -138,6 +140,75 @@ export default function App() {
   const [eventToDeleteObj, setEventToDeleteObj] = useState<Event | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const handleDragStart = (e: React.DragEvent, eventId: string | number) => {
+    e.dataTransfer.setData('eventId', String(eventId));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault();
+    const eventId = e.dataTransfer.getData('eventId');
+    if (!eventId) return;
+
+    const eventToMove = events.find(ev => String(ev.id) === eventId);
+    if (!eventToMove) return;
+
+    const oldStart = safeParseISO(eventToMove.start_date);
+    const oldEnd = safeParseISO(eventToMove.end_date);
+    
+    // Calculate duration in days
+    const duration = Math.round((oldEnd.getTime() - oldStart.getTime()) / (1000 * 60 * 60 * 24));
+    
+    const newStart = targetDate;
+    const newEnd = new Date(targetDate.getTime() + duration * 24 * 60 * 60 * 1000);
+
+    const updatedEvent = {
+      ...eventToMove,
+      start_date: format(newStart, 'yyyy-MM-dd'),
+      end_date: format(newEnd, 'yyyy-MM-dd'),
+      action: 'update'
+    };
+
+    // Optimistic update
+    const previousEvents = [...events];
+    setEvents(events.map(ev => String(ev.id) === eventId ? updatedEvent : ev));
+    showToast('行程已移動');
+
+    try {
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvent)
+      });
+      if (!res.ok) throw new Error('移動失敗');
+      fetchEvents(false);
+    } catch (err: any) {
+      setEvents(previousEvents);
+      showToast(`移動失敗: ${err.message}`, 'error');
+    }
+  };
 
   useEffect(() => {
     if (toast) {
@@ -678,10 +749,19 @@ export default function App() {
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setShowDebug(!showDebug)}
-                className="p-1.5 text-stone-400 hover:text-stone-600 transition-colors"
+                className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
                 title="偵錯資訊"
               >
                 <Info size={16} />
+              </button>
+
+              {/* 深色模式開關 */}
+              <button 
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                title={isDarkMode ? "切換為淺色模式" : "切換為深色模式"}
+              >
+                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
 
               {/* 一鍵排休開關 */}
@@ -823,7 +903,7 @@ export default function App() {
               ))}
             </div>
             
-            <div className="grid grid-cols-7">
+            <div className="grid grid-cols-7 relative">
               {calendarDays.map((day, i) => {
                 const dayEvents = filteredEvents.filter(e => {
                   try {
@@ -848,8 +928,19 @@ export default function App() {
                   const bIsLeave = bTitle.includes('休') || bTitle.includes('假');
                   if (aIsLeave && !bIsLeave) return -1;
                   if (!aIsLeave && bIsLeave) return 1;
+                  
+                  // Then sort by duration (longer events first)
+                  const aStart = startOfDay(safeParseISO(a.start_date)).getTime();
+                  const aEnd = startOfDay(safeParseISO(a.end_date)).getTime();
+                  const bStart = startOfDay(safeParseISO(b.start_date)).getTime();
+                  const bEnd = startOfDay(safeParseISO(b.end_date)).getTime();
+                  const aDuration = aEnd - aStart;
+                  const bDuration = bEnd - bStart;
+                  if (aDuration !== bDuration) return bDuration - aDuration;
+                  
                   return 0;
                 });
+                
                 const isToday = isSameDay(day, new Date());
                 const isCurrentMonth = isSameMonth(day, monthStart);
                 const isSelected = isSameDay(day, selectedDay);
@@ -865,8 +956,10 @@ export default function App() {
                         setIsDayModalOpen(true);
                       }
                     }}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, day)}
                     className={cn(
-                      "min-h-[60px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 last:border-r-0 transition-all cursor-pointer relative",
+                      "min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 last:border-r-0 transition-all cursor-pointer relative",
                       !isCurrentMonth && "bg-stone-50/30",
                       isSelected && "bg-indigo-50/50 ring-2 ring-inset ring-indigo-400 z-10",
                       holidayName && "bg-rose-50/30"
@@ -886,32 +979,55 @@ export default function App() {
                       )}
                     </div>
                     
-                    <div className="flex flex-col gap-0.5 md:gap-1 overflow-hidden">
+                    <div className="flex flex-col gap-0.5 md:gap-1 overflow-hidden relative z-20">
                       {/* Desktop View: Badges with Icons */}
                       <div className="hidden md:flex flex-col gap-1">
                         {dayEvents.slice(0, 4).map(event => {
                           const eventTitle = String(event.title || '無標題');
                           const isLeave = eventTitle.includes('休') || eventTitle.includes('假');
                           const icon = getEventIcon(eventTitle, 10);
+                          
+                          // Check if this is a multi-day event
+                          const start = startOfDay(safeParseISO(event.start_date));
+                          const end = startOfDay(safeParseISO(event.end_date));
+                          const isMultiDay = start.getTime() !== end.getTime();
+                          
+                          // Determine if this is the start, middle, or end of a multi-day event
+                          const isStart = isSameDay(day, start);
+                          const isEnd = isSameDay(day, end);
+                          
                           return (
                             <div 
                               key={event.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, event.id)}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditClick(event);
                               }}
                               style={{ 
                                 backgroundColor: isLeave ? `${event.color || '#4F46E5'}25` : `${event.color || '#4F46E5'}15`, 
-                                borderLeft: `3px solid ${event.color || '#4F46E5'}`,
-                                color: event.color || '#4F46E5'
+                                borderLeft: isStart || !isMultiDay ? `3px solid ${event.color || '#4F46E5'}` : 'none',
+                                color: event.color || '#4F46E5',
+                                // For multi-day events, remove border radius on connected sides
+                                borderTopLeftRadius: isStart || !isMultiDay ? '4px' : '0',
+                                borderBottomLeftRadius: isStart || !isMultiDay ? '4px' : '0',
+                                borderTopRightRadius: isEnd || !isMultiDay ? '4px' : '0',
+                                borderBottomRightRadius: isEnd || !isMultiDay ? '4px' : '0',
+                                // Add negative margin to connect bars across cells
+                                marginLeft: isStart || !isMultiDay ? '0' : '-8px',
+                                marginRight: isEnd || !isMultiDay ? '0' : '-8px',
+                                paddingLeft: isStart || !isMultiDay ? '6px' : '10px',
+                                zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
-                                "px-1.5 py-0.5 rounded text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1",
+                                "py-0.5 text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing",
                                 isLeave && "ring-1 ring-inset ring-white/20"
                               )}
                             >
-                              {icon && <span className="shrink-0">{icon}</span>}
-                              <span className="truncate">{eventTitle}</span>
+                              {(isStart || !isMultiDay) && icon && <span className="shrink-0">{icon}</span>}
+                              {(isStart || !isMultiDay) && <span className="truncate">{eventTitle}</span>}
+                              {(!isStart && isMultiDay) && <span className="opacity-0">{eventTitle}</span>} {/* Invisible text to maintain height */}
                             </div>
                           );
                         })}
@@ -924,27 +1040,44 @@ export default function App() {
 
                       {/* Mobile View: Compact Badges for few events */}
                       <div className="md:hidden flex flex-col gap-0.5">
-                        {dayEvents.slice(0, 2).map(event => {
+                        {dayEvents.slice(0, 3).map(event => {
                           const eventTitle = String(event.title || '無標題');
                           const icon = getEventIcon(eventTitle, 8);
+                          
+                          const start = startOfDay(safeParseISO(event.start_date));
+                          const end = startOfDay(safeParseISO(event.end_date));
+                          const isMultiDay = start.getTime() !== end.getTime();
+                          const isStart = isSameDay(day, start);
+                          const isEnd = isSameDay(day, end);
+
                           return (
                             <div 
                               key={event.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, event.id)}
                               style={{ 
                                 backgroundColor: `${event.color || '#4F46E5'}15`, 
-                                borderLeft: `2px solid ${event.color || '#4F46E5'}`,
-                                color: event.color || '#4F46E5'
+                                borderLeft: isStart || !isMultiDay ? `2px solid ${event.color || '#4F46E5'}` : 'none',
+                                color: event.color || '#4F46E5',
+                                borderTopLeftRadius: isStart || !isMultiDay ? '2px' : '0',
+                                borderBottomLeftRadius: isStart || !isMultiDay ? '2px' : '0',
+                                borderTopRightRadius: isEnd || !isMultiDay ? '2px' : '0',
+                                borderBottomRightRadius: isEnd || !isMultiDay ? '2px' : '0',
+                                marginLeft: isStart || !isMultiDay ? '0' : '-4px',
+                                marginRight: isEnd || !isMultiDay ? '0' : '-4px',
+                                paddingLeft: isStart || !isMultiDay ? '4px' : '6px',
                               }}
-                              className="px-1 py-0 rounded-[2px] text-[8px] font-black truncate flex items-center gap-0.5"
+                              className="py-0 text-[8px] font-black truncate flex items-center gap-0.5 cursor-grab active:cursor-grabbing"
                             >
-                              {icon && <span className="shrink-0">{icon}</span>}
-                              <span className="truncate">{eventTitle}</span>
+                              {(isStart || !isMultiDay) && icon && <span className="shrink-0">{icon}</span>}
+                              {(isStart || !isMultiDay) && <span className="truncate">{eventTitle}</span>}
+                              {(!isStart && isMultiDay) && <span className="opacity-0">{eventTitle}</span>}
                             </div>
                           );
                         })}
-                        {dayEvents.length > 2 && (
+                        {dayEvents.length > 3 && (
                           <div className="text-[8px] text-stone-400 font-black pl-1 flex items-center gap-0.5">
-                            <Plus size={6} /> {dayEvents.length - 2}
+                            <Plus size={6} /> {dayEvents.length - 3}
                           </div>
                         )}
                       </div>
@@ -977,6 +1110,73 @@ export default function App() {
                   {member}排休
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dashboard Statistics */}
+        {viewMode === 'calendar' && (
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Total Outings */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                <Car size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">本月全家出遊</p>
+                <p className="text-2xl font-black text-stone-900">
+                  {events.filter(e => 
+                    e.member_name === '全家' && 
+                    isSameMonth(safeParseISO(e.start_date), currentDate)
+                  ).length} <span className="text-sm font-bold text-stone-400">次</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Total Leaves */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                <Coffee size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">本月排休總計</p>
+                <p className="text-2xl font-black text-stone-900">
+                  {events.filter(e => 
+                    (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
+                    isSameMonth(safeParseISO(e.start_date), currentDate)
+                  ).length} <span className="text-sm font-bold text-stone-400">天</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Member Leave Stats */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col justify-center">
+              <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-3">各成員排休天數</p>
+              <div className="flex flex-wrap gap-2">
+                {FAMILY_MEMBERS.filter(m => m !== '全家').map(member => {
+                  const leaveCount = events.filter(e => 
+                    e.member_name === member && 
+                    (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
+                    isSameMonth(safeParseISO(e.start_date), currentDate)
+                  ).length;
+                  
+                  if (leaveCount === 0) return null;
+                  
+                  return (
+                    <div key={member} className="flex items-center gap-1.5 bg-stone-50 px-2 py-1 rounded-lg border border-stone-100">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                      <span className="text-[10px] font-bold text-stone-600">{member}</span>
+                      <span className="text-[10px] font-black text-stone-900">{leaveCount}</span>
+                    </div>
+                  );
+                })}
+                {events.filter(e => 
+                  (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
+                  isSameMonth(safeParseISO(e.start_date), currentDate)
+                ).length === 0 && (
+                  <span className="text-xs text-stone-400 font-medium">本月尚無排休紀錄</span>
+                )}
+              </div>
             </div>
           </div>
         )}
