@@ -9,54 +9,6 @@ import { v4 as uuidv4 } from 'uuid';
 dotenv.config();
 
 let db_local: any = null;
-try {
-  const Database = (await import("better-sqlite3")).default;
-  db_local = new Database("family_sync.db");
-  db_local.exec(`
-    CREATE TABLE IF NOT EXISTS events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      description TEXT,
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      member_name TEXT NOT NULL,
-      color TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Migration: Add 'time' column if it doesn't exist
-  try {
-    db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
-    console.log("✅ SQLite 'time' 欄位已成功新增");
-  } catch (error: any) {
-    if (!error.message.includes("duplicate column name")) {
-      console.error("❌ SQLite 遷移失敗 (time):", error.message);
-    }
-  }
-
-  // Migration: Add 'uuid' column if it doesn't exist
-  try {
-    db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
-    console.log("✅ SQLite 'uuid' 欄位已成功新增");
-  } catch (error: any) {
-    if (!error.message.includes("duplicate column name")) {
-      console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
-    }
-  }
-
-  // Migration: Add 'companions' column if it doesn't exist
-  try {
-    db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
-    console.log("✅ SQLite 'companions' 欄位已成功新增");
-  } catch (error: any) {
-    if (!error.message.includes("duplicate column name")) {
-      console.error("❌ SQLite 遷移失敗 (companions):", error.message);
-    }
-  }
-} catch (e) {
-  console.warn("⚠️ SQLite (better-sqlite3) 不可用，將僅使用 Google Sheets。");
-}
 
 // Google Sheets setup (Direct API)
 const hasSheetsCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY;
@@ -143,10 +95,60 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Initialize SQLite (Optional)
+  try {
+    const Database = (await import("better-sqlite3")).default;
+    db_local = new Database("family_sync.db");
+    db_local.exec(`
+      CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        member_name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migration: Add 'time' column if it doesn't exist
+    try {
+      db_local.exec("ALTER TABLE events ADD COLUMN time TEXT");
+      console.log("✅ SQLite 'time' 欄位已成功新增");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.error("❌ SQLite 遷移失敗 (time):", error.message);
+      }
+    }
+
+    // Migration: Add 'uuid' column if it doesn't exist
+    try {
+      db_local.exec("ALTER TABLE events ADD COLUMN uuid TEXT");
+      console.log("✅ SQLite 'uuid' 欄位已成功新增");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+      }
+    }
+
+    // Migration: Add 'companions' column if it doesn't exist
+    try {
+      db_local.exec("ALTER TABLE events ADD COLUMN companions TEXT");
+      console.log("✅ SQLite 'companions' 欄位已成功新增");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.error("❌ SQLite 遷移失敗 (companions):", error.message);
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ SQLite (better-sqlite3) 不可用，將僅使用 Google Sheets。");
+  }
+
   app.use(express.json());
 
   // Initialize sheet on start
-  initializeSheet();
+  await initializeSheet();
 
   // API Routes
   app.get("/api/config-status", (req, res) => {
@@ -258,26 +260,37 @@ async function startServer() {
         console.error("Google Sheets API Fetch Error:", error.message);
         // Try fallback on error
         try {
-          const fallbackRows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
-          return res.json({ 
-            events: fallbackRows, 
-            source: "local_fallback", 
-            warning: `Google Sheets 同步失敗: ${error.message}` 
-          });
-        } catch (e) {
-          return res.status(500).json({ error: "Failed to fetch events" });
+          if (db_local) {
+            const fallbackRows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
+            return res.json({ 
+              events: fallbackRows, 
+              source: "local_fallback", 
+              warning: `Google Sheets 同步失敗: ${error.message}` 
+            });
+          } else {
+            throw new Error(`Google Sheets 同步失敗: ${error.message}，且本地資料庫不可用。`);
+          }
+        } catch (e: any) {
+          return res.status(500).json({ error: e.message || "Failed to fetch events" });
         }
       }
     }
 
     // Fallback: SQLite (if SPREADSHEET_ID is not set)
     try {
-      const rows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
-      
-      let warningMsg = undefined;
-      if (typeof appsScriptWarning !== 'undefined') warningMsg = appsScriptWarning;
-      
-      res.json({ events: rows, source: "local", warning: warningMsg });
+      if (db_local) {
+        const rows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
+        
+        let warningMsg = undefined;
+        if (typeof appsScriptWarning !== 'undefined') warningMsg = appsScriptWarning;
+        
+        res.json({ events: rows, source: "local", warning: warningMsg });
+      } else {
+        res.status(500).json({ 
+          error: "無法取得活動資料。請確認環境變數 (GOOGLE_SHEET_ID 或 GOOGLE_APPS_SCRIPT_URL) 已正確設定。",
+          warning: appsScriptWarning
+        });
+      }
     } catch (error: any) {
       res.status(500).json({ error: "Failed to fetch events from local database" });
     }
@@ -343,11 +356,13 @@ async function startServer() {
         
         // Update local SQLite as well to keep it in sync
         try {
-          const stmt = db_local.prepare(`
-            INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          stmt.run(finalId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "");
+          if (db_local) {
+            const stmt = db_local.prepare(`
+              INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            stmt.run(finalId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "");
+          }
         } catch (e) {
           console.error("SQLite Insert Error (Sync):", e);
         }
@@ -409,16 +424,23 @@ async function startServer() {
 
     // Fallback: SQLite
     try {
-      const stmt = db_local.prepare(`
-        INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color);
-      
-      let warningMsg = undefined;
-      if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
-      
-      return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
+      if (db_local) {
+        const stmt = db_local.prepare(`
+          INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color);
+        
+        let warningMsg = undefined;
+        if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
+        
+        return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
+      } else {
+        return res.status(500).json({ 
+          error: "儲存失敗：Google 試算表未設定且本地資料庫不可用。",
+          details: sheetsWarning 
+        });
+      }
     } catch (error: any) {
       console.error("SQLite Save Error:", error.message);
       return res.status(500).json({ 
@@ -504,12 +526,14 @@ async function startServer() {
         
         // Update local SQLite as well to keep it in sync
         try {
-          const stmt = db_local.prepare(`
-            UPDATE events 
-            SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?
-            WHERE uuid = ? OR id = ?
-          `);
-          stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
+          if (db_local) {
+            const stmt = db_local.prepare(`
+              UPDATE events 
+              SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?
+              WHERE uuid = ? OR id = ?
+            `);
+            stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
+          }
         } catch (e) {
           console.error("SQLite Update Error (Sync):", e);
         }
@@ -631,16 +655,20 @@ async function startServer() {
 
     // Fallback: SQLite
     try {
-      const stmt = db_local.prepare(`
-        UPDATE events 
-        SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?
-        WHERE uuid = ? OR id = ?
-      `);
-      const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, id, id);
-      if (result.changes > 0) {
-        res.json({ success: true, source: "local" });
+      if (db_local) {
+        const stmt = db_local.prepare(`
+          UPDATE events 
+          SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?
+          WHERE uuid = ? OR id = ?
+        `);
+        const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, id, id);
+        if (result.changes > 0) {
+          res.json({ success: true, source: "local" });
+        } else {
+          res.status(404).json({ error: "Event not found" });
+        }
       } else {
-        res.status(404).json({ error: "Event not found" });
+        res.status(500).json({ error: "更新失敗：Google 試算表未設定且本地資料庫不可用。" });
       }
     } catch (error: any) {
       console.error("SQLite Update Error:", error.message);
@@ -658,10 +686,12 @@ async function startServer() {
     // 1. Try to find event details first
     // Try SQLite
     try {
-      const stmt = db_local.prepare("SELECT * FROM events WHERE uuid = ? OR id = ?");
-      eventDetails = stmt.get(id, id);
-      if (eventDetails) {
-        results.sqlite_found = true;
+      if (db_local) {
+        const stmt = db_local.prepare("SELECT * FROM events WHERE uuid = ? OR id = ?");
+        eventDetails = stmt.get(id, id);
+        if (eventDetails) {
+          results.sqlite_found = true;
+        }
       }
     } catch (error: any) {
       console.error("SQLite Fetch Error:", error.message);
@@ -747,9 +777,13 @@ async function startServer() {
 
     // SQLite Deletion
     try {
-      const stmt = db_local.prepare("DELETE FROM events WHERE uuid = ? OR id = ?");
-      const result = stmt.run(id, id);
-      results.sqlite = { success: result.changes > 0 };
+      if (db_local) {
+        const stmt = db_local.prepare("DELETE FROM events WHERE uuid = ? OR id = ?");
+        const result = stmt.run(id, id);
+        results.sqlite = { success: result.changes > 0 };
+      } else {
+        results.sqlite = { success: false, error: "SQLite is not available" };
+      }
     } catch (error: any) {
       results.sqlite = { success: false, error: error.message };
     }

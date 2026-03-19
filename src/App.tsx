@@ -225,7 +225,10 @@ export default function App() {
     try {
       if (showLoading) setLoading(true);
       const res = await fetch('/api/events');
-      if (!res.ok) throw new Error('無法取得活動資料');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || '無法取得活動資料');
+      }
       const data = await res.json();
       
       // 確保所有 ID 都轉換為字串
@@ -646,7 +649,7 @@ export default function App() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-6 flex items-center gap-3">
             <X size={20} />
-            <p className="text-sm font-medium">{error}。請確認環境變數設定。</p>
+            <p className="text-sm font-medium">{error}</p>
           </div>
         )}
 
