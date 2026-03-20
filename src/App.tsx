@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   format, 
   startOfMonth, 
@@ -10,6 +10,7 @@ import {
   isSameDay, 
   addMonths, 
   subMonths,
+  addDays,
   parseISO,
   isWithinInterval,
   startOfDay
@@ -59,6 +60,7 @@ interface Event {
   time?: string;
   member_name: string;
   color: string;
+  companions?: string;
 }
 
 const FAMILY_MEMBERS = ['全家', '江雪卿', '黃喬裕', '陳愉婷', '黃宣綾', '黃宣綸', '黃郁婷', '郭力維', '黃郁慈', '郭品佑', '郭品彤'];
@@ -278,6 +280,8 @@ export default function App() {
     start_date: format(new Date(), 'yyyy-MM-dd'),
     end_date: format(new Date(), 'yyyy-MM-dd'),
     time: '',
+    start_time: '',
+    end_time: '',
     member_name: FAMILY_MEMBERS[0],
     color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
     companions: '',
@@ -402,15 +406,27 @@ export default function App() {
     const startDate = normalizeDate(event.start_date);
     const endDate = normalizeDate(event.end_date || event.start_date);
     const eventTime = normalizeTime(event.time, event.start_date);
+    let startTime = '';
+    let endTime = '';
+    
+    if (eventTime && eventTime.includes(' - ')) {
+      const [s, e] = eventTime.split(' - ');
+      startTime = s;
+      endTime = e;
+    } else if (eventTime) {
+      startTime = eventTime;
+    }
     
     setNewEvent({
-      title: event.title,
+      title: event.title || '',
       description: event.description || '',
-      start_date: startDate,
-      end_date: endDate,
-      time: eventTime,
-      member_name: event.member_name,
-      color: event.color,
+      start_date: startDate || format(new Date(), 'yyyy-MM-dd'),
+      end_date: endDate || startDate || format(new Date(), 'yyyy-MM-dd'),
+      time: eventTime || '',
+      start_time: startTime || '',
+      end_time: endTime || '',
+      member_name: event.member_name || FAMILY_MEMBERS[0],
+      color: event.color || MEMBER_COLORS[FAMILY_MEMBERS[0]],
       companions: (event as any).companions || '',
     });
     setIsModalOpen(true);
@@ -457,8 +473,19 @@ export default function App() {
     const eventColor = MEMBER_COLORS[newEvent.member_name] || '#4F46E5';
     const isEditing = !!editingEventId;
     
+    // Combine start_time and end_time into time field
+    let combinedTime = '';
+    if (newEvent.start_time && newEvent.end_time) {
+      combinedTime = `${newEvent.start_time} - ${newEvent.end_time}`;
+    } else if (newEvent.start_time) {
+      combinedTime = newEvent.start_time;
+    } else if (newEvent.end_time) {
+      combinedTime = ` - ${newEvent.end_time}`;
+    }
+
     const optimisticEvent = {
       ...newEvent,
+      time: combinedTime,
       id: isEditing ? editingEventId : Date.now().toString(),
       color: eventColor
     };
@@ -481,8 +508,11 @@ export default function App() {
       start_date: format(new Date(), 'yyyy-MM-dd'),
       end_date: format(new Date(), 'yyyy-MM-dd'),
       time: '',
+      start_time: '',
+      end_time: '',
       member_name: FAMILY_MEMBERS[0],
       color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+      companions: '',
     });
     showToast(isEditing ? '活動已更新' : '活動已儲存');
 
@@ -495,6 +525,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           ...newEvent, 
+          time: combinedTime,
           color: eventColor,
           action: isEditing ? 'update' : 'create'
         })
@@ -559,6 +590,10 @@ export default function App() {
     if (s.match(/^\d{2}:\d{2}:\d{2}$/)) {
       return s.substring(0, 5);
     }
+    // Replace " - " with " ~ " for better display
+    if (s.includes(' - ')) {
+      return s.replace(' - ', ' ~ ');
+    }
     return s;
   };
 
@@ -571,6 +606,71 @@ export default function App() {
   const filteredEvents = events.filter(event => 
     filterMember === '全部' || event.member_name === filterMember
   );
+
+  // Calculate lanes for multi-day events to prevent visual overlap
+  const eventLanes = useMemo(() => {
+    const lanes: Record<string, number> = {};
+    const occupiedSlots: Record<string, boolean[]> = {};
+
+    // Sort: Multi-day first, then by duration, then by start date, then by title
+    const sortedForLanes = [...filteredEvents].sort((a, b) => {
+      const startA = startOfDay(safeParseISO(a.start_date));
+      const startB = startOfDay(safeParseISO(b.start_date));
+      const endA = startOfDay(safeParseISO(a.end_date));
+      const endB = startOfDay(safeParseISO(b.end_date));
+      
+      const isMultiA = startA.getTime() !== endA.getTime();
+      const isMultiB = startB.getTime() !== endB.getTime();
+      
+      if (isMultiA && !isMultiB) return -1;
+      if (!isMultiA && isMultiB) return 1;
+      
+      const durA = endA.getTime() - startA.getTime();
+      const durB = endB.getTime() - startB.getTime();
+      if (durA !== durB) return durB - durA;
+      
+      if (startA.getTime() !== startB.getTime()) return startA.getTime() - startB.getTime();
+      
+      return (a.title || '').localeCompare(b.title || '');
+    });
+
+    sortedForLanes.forEach(event => {
+      const start = startOfDay(safeParseISO(event.start_date));
+      const end = startOfDay(safeParseISO(event.end_date));
+      
+      let lane = 0;
+      let foundLane = false;
+      
+      while (!foundLane) {
+        let isLaneFree = true;
+        let curr = new Date(start);
+        while (curr <= end) {
+          const dateKey = format(curr, 'yyyy-MM-dd');
+          if (occupiedSlots[dateKey] && occupiedSlots[dateKey][lane]) {
+            isLaneFree = false;
+            break;
+          }
+          curr = addDays(curr, 1);
+        }
+        
+        if (isLaneFree) {
+          lanes[event.id] = lane;
+          let fillCurr = new Date(start);
+          while (fillCurr <= end) {
+            const dateKey = format(fillCurr, 'yyyy-MM-dd');
+            if (!occupiedSlots[dateKey]) occupiedSlots[dateKey] = [];
+            occupiedSlots[dateKey][lane] = true;
+            fillCurr = addDays(fillCurr, 1);
+          }
+          foundLane = true;
+        } else {
+          lane++;
+        }
+      }
+    });
+    
+    return lanes;
+  }, [filteredEvents]);
 
   const selectedDayEvents = filteredEvents.filter(e => {
     try {
@@ -612,7 +712,7 @@ export default function App() {
       isDarkMode && "dark"
     )}>
       {/* Header - Simplified for Mobile */}
-      <header className="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+      <header className="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
             <CalendarIcon size={16} className="md:hidden" />
@@ -908,40 +1008,48 @@ export default function App() {
             
             <div className="grid grid-cols-7 relative">
               {calendarDays.map((day, i) => {
+                // Sort events for consistent lane assignment if needed, 
+                // but we'll primarily use the pre-calculated eventLanes.
                 const dayEvents = filteredEvents.filter(e => {
                   try {
                     const start = startOfDay(safeParseISO(e.start_date));
                     const end = startOfDay(safeParseISO(e.end_date));
                     const current = startOfDay(day);
                     
-                    // Safety check for interval
                     const intervalStart = start < end ? start : end;
                     const intervalEnd = start < end ? end : start;
                     
                     return isWithinInterval(current, { start: intervalStart, end: intervalEnd });
                   } catch (err) {
-                    console.error("Date filter error:", err);
                     return false;
                   }
-                }).sort((a, b) => {
-                  // Sort '排休' events to the top
-                  const aTitle = String(a.title || '');
-                  const bTitle = String(b.title || '');
-                  const aIsLeave = aTitle.includes('休') || aTitle.includes('假');
-                  const bIsLeave = bTitle.includes('休') || bTitle.includes('假');
-                  if (aIsLeave && !bIsLeave) return -1;
-                  if (!aIsLeave && bIsLeave) return 1;
-                  
-                  // Then sort by duration (longer events first)
-                  const aStart = startOfDay(safeParseISO(a.start_date)).getTime();
-                  const aEnd = startOfDay(safeParseISO(a.end_date)).getTime();
-                  const bStart = startOfDay(safeParseISO(b.start_date)).getTime();
-                  const bEnd = startOfDay(safeParseISO(b.end_date)).getTime();
-                  const aDuration = aEnd - aStart;
-                  const bDuration = bEnd - bStart;
-                  if (aDuration !== bDuration) return bDuration - aDuration;
-                  
-                  return 0;
+                });
+
+                // Assign events to slots based on their pre-calculated lanes
+                const maxDisplaySlots = 4;
+                const daySlots = new Array(maxDisplaySlots).fill(null);
+                const dayOverflow: any[] = [];
+                
+                dayEvents.forEach(event => {
+                  const lane = eventLanes[event.id] ?? 999;
+                  if (lane < maxDisplaySlots) {
+                    daySlots[lane] = event;
+                  } else {
+                    dayOverflow.push(event);
+                  }
+                });
+
+                // For mobile
+                const maxMobileSlots = 3;
+                const mobileSlots = new Array(maxMobileSlots).fill(null);
+                const mobileOverflow: any[] = [];
+                dayEvents.forEach(event => {
+                  const lane = eventLanes[event.id] ?? 999;
+                  if (lane < maxMobileSlots) {
+                    mobileSlots[lane] = event;
+                  } else {
+                    mobileOverflow.push(event);
+                  }
                 });
                 
                 const isToday = isSameDay(day, new Date());
@@ -985,7 +1093,10 @@ export default function App() {
                     <div className="flex flex-col gap-0.5 md:gap-1 relative z-20">
                       {/* Desktop View: Badges with Icons */}
                       <div className="hidden md:flex flex-col gap-1">
-                        {dayEvents.slice(0, 4).map(event => {
+                        {daySlots.map((event, slotIndex) => {
+                          if (!event) {
+                            return <div key={`empty-${slotIndex}`} className="h-[20px] invisible" />;
+                          }
                           const eventTitle = String(event.title || '無標題');
                           const isLeave = eventTitle.includes('休') || eventTitle.includes('假');
                           const icon = getEventIcon(eventTitle, 10);
@@ -1025,7 +1136,7 @@ export default function App() {
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
-                                "py-0.5 text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing",
+                                "py-0.5 text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[20px]",
                                 isLeave && "ring-1 ring-inset ring-white/20"
                               )}
                             >
@@ -1034,16 +1145,19 @@ export default function App() {
                             </div>
                           );
                         })}
-                        {dayEvents.length > 4 && (
+                        {dayOverflow.length > 0 && (
                           <div className="text-[9px] text-stone-400 font-black pl-1 flex items-center gap-1">
-                            <Plus size={8} /> {dayEvents.length - 4} 更多
+                            <Plus size={8} /> {dayOverflow.length} 更多
                           </div>
                         )}
                       </div>
 
                       {/* Mobile View: Compact Badges for few events */}
                       <div className="md:hidden flex flex-col gap-0.5">
-                        {dayEvents.slice(0, 3).map(event => {
+                        {mobileSlots.map((event, slotIndex) => {
+                          if (!event) {
+                            return <div key={`empty-mobile-${slotIndex}`} className="h-[14px] invisible" />;
+                          }
                           const eventTitle = String(event.title || '無標題');
                           const icon = getEventIcon(eventTitle, 8);
                           
@@ -1070,17 +1184,18 @@ export default function App() {
                                 marginRight: isEnd || !isMultiDay ? '0' : '-5px',
                                 paddingLeft: isStart || !isMultiDay ? '4px' : '6px',
                                 paddingRight: isEnd || !isMultiDay ? '4px' : '6px',
+                                zIndex: isMultiDay ? 10 : 1,
                               }}
-                              className="py-0 text-[8px] font-black truncate flex items-center gap-0.5 cursor-grab active:cursor-grabbing"
+                              className="py-0.5 text-[8px] font-bold truncate h-[14px] flex items-center gap-0.5"
                             >
                               {icon && <span className="shrink-0">{icon}</span>}
                               <span className="truncate">{eventTitle}</span>
                             </div>
                           );
                         })}
-                        {dayEvents.length > 3 && (
-                          <div className="text-[8px] text-stone-400 font-black pl-1 flex items-center gap-0.5">
-                            <Plus size={6} /> {dayEvents.length - 3}
+                        {mobileOverflow.length > 0 && (
+                          <div className="text-[7px] text-stone-400 font-black pl-0.5">
+                            +{mobileOverflow.length}
                           </div>
                         )}
                       </div>
@@ -1425,31 +1540,31 @@ export default function App() {
                   <input 
                     required
                     type="text" 
-                    value={newEvent.title}
+                    value={newEvent.title || ''}
                     onChange={e => setNewEvent({...newEvent, title: e.target.value})}
                     className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                     placeholder="例如：家族聚餐"
                   />
                 </div>
 
-                <div className={cn("grid gap-3", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) ? "grid-cols-2" : "grid-cols-1")}>
+                <div className={cn("grid gap-3", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') ? "grid-cols-2" : "grid-cols-1")}>
                   <div>
                     <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">日期</label>
                     <input 
                       required
                       type="date" 
-                      value={newEvent.start_date}
+                      value={newEvent.start_date || ''}
                       onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
                       className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                     />
                   </div>
-                  {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
+                  {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
                     <div>
                       <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">結束日期</label>
                       <input 
                         required
                         type="date" 
-                        value={newEvent.end_date}
+                        value={newEvent.end_date || ''}
                         onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
                         className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                       />
@@ -1457,15 +1572,26 @@ export default function App() {
                   )}
                 </div>
 
-                {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
-                  <div>
-                    <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">時間 (選填)</label>
-                    <input 
-                      type="time" 
-                      value={newEvent.time}
-                      onChange={e => setNewEvent({...newEvent, time: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
-                    />
+                {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">開始時間 (選填)</label>
+                      <input 
+                        type="time" 
+                        value={newEvent.start_time || ''}
+                        onChange={e => setNewEvent({...newEvent, start_time: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">結束時間 (選填)</label>
+                      <input 
+                        type="time" 
+                        value={newEvent.end_time || ''}
+                        onChange={e => setNewEvent({...newEvent, end_time: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -1526,7 +1652,7 @@ export default function App() {
                 <div>
                   <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">備註 (選填)</label>
                   <textarea 
-                    value={newEvent.description}
+                    value={newEvent.description || ''}
                     onChange={e => setNewEvent({...newEvent, description: e.target.value})}
                     className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[80px] text-sm font-medium resize-none text-stone-900 dark:text-stone-100"
                     placeholder="活動細節..."
