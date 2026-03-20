@@ -607,9 +607,12 @@ export default function App() {
   }).slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 font-sans pb-24 md:pb-0">
+    <div className={cn(
+      "min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans pb-24 md:pb-0 transition-colors duration-300",
+      isDarkMode && "dark"
+    )}>
       {/* Header - Simplified for Mobile */}
-      <header className="bg-white border-b border-stone-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+      <header className="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
             <CalendarIcon size={16} className="md:hidden" />
@@ -632,16 +635,16 @@ export default function App() {
         <div className="flex items-center gap-1.5 md:gap-4">
           <button 
             onClick={() => fetchEvents(true)}
-            className="p-2 text-stone-500 hover:text-indigo-600 transition-colors bg-white border border-stone-200 rounded-lg shadow-sm"
+            className="p-2 text-stone-500 hover:text-indigo-600 dark:text-stone-400 dark:hover:text-indigo-400 transition-colors bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg shadow-sm"
             title="重新整理"
           >
             <Zap size={16} className={cn(loading && "animate-pulse text-indigo-500")} />
           </button>
 
-          <div className="flex items-center bg-stone-100 rounded-lg p-0.5 md:p-1">
+          <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5 md:p-1">
             <button 
               onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-              className="p-1 md:p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+              className="p-1 md:p-1 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-md transition-all"
               title="上個月"
             >
               <ChevronLeft size={18} className="md:w-[18px] md:h-[18px]" />
@@ -651,7 +654,7 @@ export default function App() {
             </span>
             <button 
               onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-              className="p-1 md:p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+              className="p-1 md:p-1 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-md transition-all"
               title="下個月"
             >
               <ChevronRight size={18} className="md:w-[18px] md:h-[18px]" />
@@ -663,7 +666,7 @@ export default function App() {
               setCurrentDate(new Date());
               setSelectedDay(new Date());
             }}
-            className="flex items-center justify-center bg-white border border-stone-200 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold text-stone-600 hover:bg-stone-50 transition-colors shadow-sm"
+            className="flex items-center justify-center bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
           >
             今天
           </button>
@@ -692,12 +695,12 @@ export default function App() {
 
       <main className="p-4 md:p-6 max-w-7xl mx-auto">
         {/* Desktop View Toggle (Hidden on Mobile) */}
-        <div className="hidden md:flex bg-stone-200 p-1 rounded-xl mb-6 w-fit">
+        <div className="hidden md:flex bg-stone-200 dark:bg-stone-800 p-1 rounded-xl mb-6 w-fit">
           <button 
             onClick={() => setViewMode('calendar')}
             className={cn(
               "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-              viewMode === 'calendar' ? "bg-white shadow-sm text-indigo-600" : "text-stone-500"
+              viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
             )}
           >
             月曆模式
@@ -706,7 +709,7 @@ export default function App() {
             onClick={() => setViewMode('list')}
             className={cn(
               "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-              viewMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-stone-500"
+              viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
             )}
           >
             列表模式
@@ -729,8 +732,8 @@ export default function App() {
                   className={cn(
                     "flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5",
                     filterMember === member 
-                      ? "bg-stone-800 border-stone-800 text-white shadow-md" 
-                      : "bg-white border-stone-200 text-stone-600 hover:border-stone-300"
+                      ? "bg-stone-800 dark:bg-stone-100 border-stone-800 dark:border-stone-100 text-white dark:text-stone-900 shadow-md" 
+                      : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600"
                   )}
                 >
                   {member !== '全部' && (
@@ -770,8 +773,8 @@ export default function App() {
                 className={cn(
                   "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
                   isQuickLeaveEnabled 
-                    ? "bg-amber-100 text-amber-700 border border-amber-200 shadow-sm"
-                    : "bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200"
+                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-sm"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700"
                 )}
               >
                 <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
@@ -781,12 +784,12 @@ export default function App() {
 
             <div className="md:hidden">
               {/* Mobile View Mode Toggle */}
-              <div className="flex bg-stone-100 p-0.5 rounded-lg">
+              <div className="flex bg-stone-100 dark:bg-stone-800 p-0.5 rounded-lg">
                 <button 
                   onClick={() => setViewMode('calendar')}
                   className={cn(
                     "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
-                    viewMode === 'calendar' ? "bg-white shadow-sm text-indigo-600" : "text-stone-500"
+                    viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
                   月曆
@@ -795,7 +798,7 @@ export default function App() {
                   onClick={() => setViewMode('list')}
                   className={cn(
                     "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
-                    viewMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-stone-500"
+                    viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
                   列表
@@ -806,7 +809,7 @@ export default function App() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-6 flex flex-col gap-3">
+          <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <AlertCircle size={20} />
@@ -814,7 +817,7 @@ export default function App() {
               </div>
               <button 
                 onClick={() => fetchEvents(true)}
-                className="flex items-center gap-1 px-3 py-1 bg-red-100 hover:bg-red-200 rounded-lg text-xs font-bold transition-colors"
+                className="flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-900/80 rounded-lg text-xs font-bold transition-colors"
               >
                 <Zap size={12} />
                 <span>重試</span>
@@ -822,12 +825,12 @@ export default function App() {
             </div>
             <button 
               onClick={() => setShowDebug(!showDebug)}
-              className="text-xs text-red-500 underline self-start ml-8"
+              className="text-xs text-red-500 dark:text-red-400 underline self-start ml-8"
             >
               {showDebug ? '隱藏除錯資訊' : '顯示除錯資訊'}
             </button>
             {showDebug && configStatus && (
-              <div className="ml-8 p-3 bg-white/50 rounded-lg text-[10px] font-mono space-y-1">
+              <div className="ml-8 p-3 bg-white/50 dark:bg-stone-900/50 rounded-lg text-[10px] font-mono space-y-1">
                 <p>Google Sheet ID: {configStatus.hasSheetId ? '✅ 已設定' : '❌ 未設定'}</p>
                 <p>Service Account: {configStatus.serviceAccountEmail}</p>
                 <p>Private Key: {configStatus.hasPrivateKey ? '✅ 已設定' : '❌ 未設定'}</p>
@@ -839,14 +842,14 @@ export default function App() {
                     試算表初始化: {configStatus.sheetInit.success ? '✅ 成功' : `❌ 失敗 (${configStatus.sheetInit.error})`}
                   </p>
                 )}
-                <p className="mt-2 text-stone-400">提示：請在 Vercel 專案設定中新增這些環境變數。</p>
+                <p className="mt-2 text-stone-400 dark:text-stone-500">提示：請在 Vercel 專案設定中新增這些環境變數。</p>
               </div>
             )}
           </div>
         )}
 
         {warning && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-700 p-4 rounded-xl mb-6 flex items-center gap-3">
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 p-4 rounded-xl mb-6 flex items-center gap-3">
             <AlertTriangle size={20} className="text-amber-500" />
             <p className="text-sm font-medium">{warning}</p>
           </div>
@@ -894,10 +897,10 @@ export default function App() {
 
         {/* Calendar Grid (Desktop & Mobile Calendar Mode) */}
         {(viewMode === 'calendar') && (
-          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-stone-100 bg-stone-50/50">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/50">
               {['日', '一', '二', '三', '四', '五', '六'].map(day => (
-                <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-black text-stone-400 uppercase tracking-widest">
+                <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">
                   {day}
                 </div>
               ))}
@@ -959,21 +962,21 @@ export default function App() {
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, day)}
                     className={cn(
-                      "min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 last:border-r-0 transition-all cursor-pointer relative",
-                      !isCurrentMonth && "bg-stone-50/30",
-                      isSelected && "bg-indigo-50/50 ring-2 ring-inset ring-indigo-400 z-10",
-                      holidayName && "bg-rose-50/30"
+                      "min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 dark:border-stone-800 last:border-r-0 transition-all cursor-pointer relative",
+                      !isCurrentMonth && "bg-stone-50/30 dark:bg-stone-800/30",
+                      isSelected && "bg-indigo-50/50 dark:bg-indigo-900/20 ring-2 ring-inset ring-indigo-400 z-10",
+                      holidayName && "bg-rose-50/30 dark:bg-rose-900/10"
                     )}
                   >
                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 md:mb-2 gap-1">
                       <span className={cn(
                         "w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-xs md:text-sm font-bold",
-                        isToday ? "bg-indigo-600 text-white shadow-md" : holidayName ? "text-rose-600" : isCurrentMonth ? "text-stone-900" : "text-stone-300"
+                        isToday ? "bg-indigo-600 text-white shadow-md" : holidayName ? "text-rose-600 dark:text-rose-400" : isCurrentMonth ? "text-stone-900 dark:text-stone-100" : "text-stone-300 dark:text-stone-600"
                       )}>
                         {format(day, 'd')}
                       </span>
                       {holidayName && (
-                        <span className="text-[8px] md:text-[10px] font-black text-rose-500 truncate bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                        <span className="text-[8px] md:text-[10px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
                           {holidayName}
                         </span>
                       )}
@@ -1091,10 +1094,10 @@ export default function App() {
 
         {/* 一鍵排休區塊 */}
         {viewMode === 'calendar' && isQuickLeaveEnabled && (
-          <div className="mt-4 bg-white border border-amber-200 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="mt-4 bg-white dark:bg-stone-900 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center gap-2 mb-3">
               <Zap size={16} className="text-amber-500" />
-              <h3 className="text-xs font-black text-stone-700 uppercase tracking-widest">
+              <h3 className="text-xs font-black text-stone-700 dark:text-stone-300 uppercase tracking-widest">
                 快速新增排休 ({format(selectedDay, 'MM/dd')})
               </h3>
             </div>
@@ -1103,7 +1106,7 @@ export default function App() {
                 <button
                   key={member}
                   onClick={() => handleQuickLeave(member)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white hover:bg-stone-50"
+                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700"
                   style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
                 >
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
@@ -1118,40 +1121,40 @@ export default function App() {
         {viewMode === 'calendar' && (
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Total Outings */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+            <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0">
                 <Car size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">本月全家出遊</p>
-                <p className="text-2xl font-black text-stone-900">
+                <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月全家出遊</p>
+                <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
                   {events.filter(e => 
                     e.member_name === '全家' && 
                     isSameMonth(safeParseISO(e.start_date), currentDate)
-                  ).length} <span className="text-sm font-bold text-stone-400">次</span>
+                  ).length} <span className="text-sm font-bold text-stone-400 dark:text-stone-500">次</span>
                 </p>
               </div>
             </div>
 
             {/* Total Leaves */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex items-center gap-4">
-              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+            <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-4">
+              <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
                 <Coffee size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">本月排休總計</p>
-                <p className="text-2xl font-black text-stone-900">
+                <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月排休總計</p>
+                <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
                   {events.filter(e => 
                     (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
                     isSameMonth(safeParseISO(e.start_date), currentDate)
-                  ).length} <span className="text-sm font-bold text-stone-400">天</span>
+                  ).length} <span className="text-sm font-bold text-stone-400 dark:text-stone-500">天</span>
                 </p>
               </div>
             </div>
 
             {/* Member Leave Stats */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col justify-center">
-              <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-3">各成員排休天數</p>
+            <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col justify-center">
+              <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3">各成員排休天數</p>
               <div className="flex flex-wrap gap-2">
                 {FAMILY_MEMBERS.filter(m => m !== '全家').map(member => {
                   const leaveCount = events.filter(e => 
@@ -1163,10 +1166,10 @@ export default function App() {
                   if (leaveCount === 0) return null;
                   
                   return (
-                    <div key={member} className="flex items-center gap-1.5 bg-stone-50 px-2 py-1 rounded-lg border border-stone-100">
+                    <div key={member} className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-lg border border-stone-100 dark:border-stone-700">
                       <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
-                      <span className="text-[10px] font-bold text-stone-600">{member}</span>
-                      <span className="text-[10px] font-black text-stone-900">{leaveCount}</span>
+                      <span className="text-[10px] font-bold text-stone-600 dark:text-stone-300">{member}</span>
+                      <span className="text-[10px] font-black text-stone-900 dark:text-stone-100">{leaveCount}</span>
                     </div>
                   );
                 })}
@@ -1174,7 +1177,7 @@ export default function App() {
                   (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
                   isSameMonth(safeParseISO(e.start_date), currentDate)
                 ).length === 0 && (
-                  <span className="text-xs text-stone-400 font-medium">本月尚無排休紀錄</span>
+                  <span className="text-xs text-stone-400 dark:text-stone-500 font-medium">本月尚無排休紀錄</span>
                 )}
               </div>
             </div>
@@ -1185,26 +1188,26 @@ export default function App() {
         {viewMode === 'calendar' && (
           <div className="mt-8 md:mt-10">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm md:text-base font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+              <h3 className="text-sm md:text-base font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest flex items-center gap-2">
                 <div className="w-1 h-5 bg-emerald-500 rounded-full" />
                 接下來的活動
               </h3>
-              <span className="text-[10px] font-bold text-stone-400 bg-stone-100 px-2 py-1 rounded-lg">
+              <span className="text-[10px] font-bold text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">
                 近期 {upcomingEvents.length} 個活動
               </span>
             </div>
             
             <div className="flex overflow-x-auto gap-4 pb-6 -mx-4 px-4 md:mx-0 md:px-0 snap-x no-scrollbar">
               {upcomingEvents.length === 0 ? (
-                <div className="w-full bg-white border border-dashed border-stone-200 rounded-2xl p-8 text-center shadow-sm">
-                  <div className="w-12 h-12 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-3 text-stone-300">
+                <div className="w-full bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-2xl p-8 text-center shadow-sm">
+                  <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-3 text-stone-300 dark:text-stone-600">
                     <CalendarIcon size={24} />
                   </div>
-                  <p className="text-stone-400 text-sm font-bold">目前沒有即將到來的活動</p>
+                  <p className="text-stone-400 dark:text-stone-500 text-sm font-bold">目前沒有即將到來的活動</p>
                 </div>
               ) : (
                 upcomingEvents.map(event => (
-                  <div key={event.id} className="snap-center shrink-0 w-[260px] md:w-[300px] bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col gap-3 hover:shadow-md transition-all">
+                  <div key={event.id} className="snap-center shrink-0 w-[260px] md:w-[300px] bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col gap-3 hover:shadow-md transition-all">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
@@ -1215,21 +1218,21 @@ export default function App() {
                           {event.member_name}
                         </span>
                       </div>
-                      <span className="text-xs font-bold text-stone-400">
+                      <span className="text-xs font-bold text-stone-400 dark:text-stone-500">
                         {format(safeParseISO(event.start_date), 'MM/dd')}
                         {event.start_date !== event.end_date && ` - ${format(safeParseISO(event.end_date), 'MM/dd')}`}
                       </span>
                     </div>
-                    <h4 className="font-black text-stone-900 text-base truncate">{event.title}</h4>
+                    <h4 className="font-black text-stone-900 dark:text-stone-100 text-base truncate">{event.title}</h4>
                     <div className="flex items-center gap-3 mt-auto pt-2">
                       {event.time && (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50/50 px-2 py-1 rounded-lg">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 px-2 py-1 rounded-lg">
                           <Clock size={14} />
                           {formatTimeDisplay(event.time)}
                         </div>
                       )}
                       {event.description && (
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-stone-500 truncate">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-stone-500 dark:text-stone-400 truncate">
                           <Filter size={14} className="opacity-50" />
                           <span className="truncate">{event.description}</span>
                         </div>
@@ -1250,14 +1253,14 @@ export default function App() {
               .filter((date): date is string => typeof date === 'string' && isSameMonth(safeParseISO(date), currentDate))
               .map(date => (
                 <div key={date}>
-                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-3 sticky top-16 md:top-24 bg-stone-50 py-2 z-10">
+                  <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-16 md:top-24 bg-stone-50 dark:bg-stone-950 py-2 z-10">
                     {format(safeParseISO(date), 'MM月dd日 EEEE')}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {filteredEvents
                       .filter(e => e.start_date === date)
                       .map(event => (
-                        <div key={event.id} className="bg-white rounded-xl p-4 shadow-sm border border-stone-100 flex items-start gap-4">
+                        <div key={event.id} className="bg-white dark:bg-stone-900 rounded-xl p-4 shadow-sm border border-stone-100 dark:border-stone-800 flex items-start gap-4">
                           <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                             {getEventIcon(event.title || '', 20) || <User size={20} />}
                           </div>
@@ -1270,26 +1273,26 @@ export default function App() {
                               <div className="flex items-center gap-2">
                                 <button 
                                   onClick={() => handleEditClick(event)}
-                                  className="p-1 text-stone-400 hover:text-indigo-600 transition-colors"
+                                  className="p-1 text-stone-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                                 >
                                   <Edit size={16} />
                                 </button>
                                 <button 
                                   onClick={() => handleDeleteEvent(event)}
-                                  className="p-1 text-stone-400 hover:text-rose-600 transition-colors"
+                                  className="p-1 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                                 >
                                   <Trash2 size={16} />
                                 </button>
                               </div>
                             </div>
-                            <h4 className="font-bold text-stone-900">{event.title}</h4>
+                            <h4 className="font-bold text-stone-900 dark:text-stone-100">{event.title}</h4>
                             <div className="flex items-center gap-2 mt-1">
                               {event.time && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
                                   <Clock size={10} /> {formatTimeDisplay(event.time)}
                                 </span>
                               )}
-                              {event.description && <p className="text-xs text-stone-500">{event.description}</p>}
+                              {event.description && <p className="text-xs text-stone-500 dark:text-stone-400">{event.description}</p>}
                             </div>
                           </div>
                         </div>
@@ -1298,9 +1301,9 @@ export default function App() {
                 </div>
               ))}
             {filteredEvents.filter(e => isSameMonth(safeParseISO(e.start_date), currentDate)).length === 0 && (
-              <div className="bg-white border border-dashed border-stone-200 rounded-2xl p-12 text-center">
-                <CalendarIcon size={48} className="mx-auto text-stone-200 mb-4" />
-                <p className="text-stone-400 font-medium">本月尚無活動紀錄</p>
+              <div className="bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-2xl p-12 text-center">
+                <CalendarIcon size={48} className="mx-auto text-stone-200 dark:text-stone-800 mb-4" />
+                <p className="text-stone-400 dark:text-stone-500 font-medium">本月尚無活動紀錄</p>
               </div>
             )}
           </div>
@@ -1308,12 +1311,12 @@ export default function App() {
       </main>
 
       {/* Bottom Navigation Bar for Mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <button 
           onClick={() => setViewMode('calendar')}
           className={cn(
             "flex flex-col items-center gap-1 transition-all",
-            viewMode === 'calendar' ? "text-indigo-600" : "text-stone-400"
+            viewMode === 'calendar' ? "text-indigo-600 dark:text-indigo-400" : "text-stone-400 dark:text-stone-500"
           )}
         >
           <CalendarIcon size={20} />
@@ -1334,7 +1337,7 @@ export default function App() {
             });
             setIsModalOpen(true);
           }}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center -translate-y-8 border-4 border-stone-50 active:scale-90 transition-all"
+          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center -translate-y-8 border-4 border-stone-50 dark:border-stone-950 active:scale-90 transition-all"
         >
           <Plus size={28} />
         </button>
@@ -1343,7 +1346,7 @@ export default function App() {
           onClick={() => setViewMode('list')}
           className={cn(
             "flex flex-col items-center gap-1 transition-all",
-            viewMode === 'list' ? "text-indigo-600" : "text-stone-400"
+            viewMode === 'list' ? "text-indigo-600 dark:text-indigo-400" : "text-stone-400 dark:text-stone-500"
           )}
         >
           <Clock size={20} />
@@ -1365,23 +1368,23 @@ export default function App() {
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[280px] overflow-hidden animate-in zoom-in duration-200">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-[280px] overflow-hidden animate-in zoom-in duration-200 border border-stone-100 dark:border-stone-800">
             <div className="p-5 text-center">
-              <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-3 text-rose-600">
+              <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-3 text-rose-600 dark:text-rose-400">
                 <Trash2 size={24} />
               </div>
-              <h3 className="text-base font-black text-stone-900 mb-1">確定要刪除嗎？</h3>
-              <p className="text-stone-500 text-[11px] font-medium mb-5">此操作將無法復原。</p>
+              <h3 className="text-base font-black text-stone-900 dark:text-stone-100 mb-1">確定要刪除嗎？</h3>
+              <p className="text-stone-500 dark:text-stone-400 text-[11px] font-medium mb-5">此操作將無法復原。</p>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 px-3 py-2 bg-stone-100 text-stone-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-200 transition-all"
+                  className="flex-1 px-3 py-2 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all"
                 >
                   取消
                 </button>
                 <button 
                   onClick={executeDelete}
-                  className="flex-1 px-3 py-2 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+                  className="flex-1 px-3 py-2 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none"
                 >
                   刪除
                 </button>
@@ -1394,12 +1397,12 @@ export default function App() {
       {/* Add Event Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-50 flex items-end md:items-center justify-center p-0 md:p-4">
-          <div className="bg-white rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300 max-h-[90vh] flex flex-col">
-            <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50 shrink-0">
+          <div className="bg-white dark:bg-stone-900 rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300 max-h-[90vh] flex flex-col border-t md:border border-stone-100 dark:border-stone-800">
+            <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-stone-50/50 dark:bg-stone-800/50 shrink-0">
               <div className="flex flex-col">
-                <h2 className="text-base md:text-lg font-black tracking-tight">{editingEventId ? '編輯活動' : '新增活動'}</h2>
+                <h2 className="text-base md:text-lg font-black tracking-tight text-stone-900 dark:text-stone-100">{editingEventId ? '編輯活動' : '新增活動'}</h2>
                 {editingEventId && (
-                  <span className="text-[10px] text-stone-400 font-medium mt-0.5">
+                  <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium mt-0.5">
                     原始日期: {newEvent.start_date}
                   </span>
                 )}
@@ -1409,7 +1412,7 @@ export default function App() {
                   setIsModalOpen(false);
                   setEditingEventId(null);
                 }} 
-                className="w-8 h-8 flex items-center justify-center bg-stone-200 rounded-full text-stone-600 hover:bg-stone-300 transition-colors"
+                className="w-8 h-8 flex items-center justify-center bg-stone-200 dark:bg-stone-800 rounded-full text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-stone-700 transition-colors"
               >
                 <X size={18} />
               </button>
@@ -1418,37 +1421,37 @@ export default function App() {
             <div className="overflow-y-auto p-5">
               <form onSubmit={handleAddEvent} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">活動名稱</label>
+                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">活動名稱</label>
                   <input 
                     required
                     type="text" 
                     value={newEvent.title}
                     onChange={e => setNewEvent({...newEvent, title: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                    className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                     placeholder="例如：家族聚餐"
                   />
                 </div>
 
                 <div className={cn("grid gap-3", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) ? "grid-cols-2" : "grid-cols-1")}>
                   <div>
-                    <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">日期</label>
+                    <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">日期</label>
                     <input 
                       required
                       type="date" 
                       value={newEvent.start_date}
                       onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                      className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                     />
                   </div>
                   {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
                     <div>
-                      <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">結束日期</label>
+                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">結束日期</label>
                       <input 
                         required
                         type="date" 
                         value={newEvent.end_date}
                         onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                       />
                     </div>
                   )}
@@ -1456,18 +1459,18 @@ export default function App() {
 
                 {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title) && (
                   <div>
-                    <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">時間 (選填)</label>
+                    <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">時間 (選填)</label>
                     <input 
                       type="time" 
                       value={newEvent.time}
                       onChange={e => setNewEvent({...newEvent, time: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                      className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">參與成員</label>
+                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">參與成員</label>
                   <div className="flex flex-wrap gap-2">
                     {FAMILY_MEMBERS.map(member => (
                       <button
@@ -1477,8 +1480,8 @@ export default function App() {
                         className={cn(
                           "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
                           newEvent.member_name === member
-                            ? "bg-stone-800 text-white border-stone-800 shadow-sm"
-                            : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                            ? "bg-stone-800 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-800 dark:border-stone-100 shadow-sm"
+                            : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                         )}
                       >
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
@@ -1489,7 +1492,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">隨行人員 (選填)</label>
+                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">隨行人員 (選填)</label>
                   <div className="flex flex-wrap gap-2">
                     {FAMILY_MEMBERS.map(member => {
                       const isSelected = (newEvent.companions ? newEvent.companions.split(',') : []).includes(member);
@@ -1508,8 +1511,8 @@ export default function App() {
                           className={cn(
                             "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
                             isSelected
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm"
-                              : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                              ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 shadow-sm"
+                              : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                           )}
                         >
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
@@ -1521,11 +1524,11 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 uppercase tracking-widest mb-1.5">備註 (選填)</label>
+                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">備註 (選填)</label>
                   <textarea 
                     value={newEvent.description}
                     onChange={e => setNewEvent({...newEvent, description: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[80px] text-sm font-medium resize-none"
+                    className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[80px] text-sm font-medium resize-none text-stone-900 dark:text-stone-100"
                     placeholder="活動細節..."
                   />
                 </div>
@@ -1533,7 +1536,7 @@ export default function App() {
                 <div className="pt-2 pb-6 md:pb-2">
                   <button 
                     type="submit"
-                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200"
+                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200 dark:shadow-none"
                   >
                     {editingEventId ? '更新活動' : '儲存活動'}
                   </button>
@@ -1551,17 +1554,17 @@ export default function App() {
           onClick={() => setIsDayModalOpen(false)}
         >
           <div 
-            className="bg-white w-full md:w-full md:max-w-sm rounded-t-3xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 md:fade-in duration-300 max-h-[80vh] flex flex-col"
+            className="bg-white dark:bg-stone-900 w-full md:w-full md:max-w-sm rounded-t-3xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 md:fade-in duration-300 max-h-[80vh] flex flex-col border-t md:border border-stone-100 dark:border-stone-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-3 border-b border-stone-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-base font-black text-stone-900 flex items-center gap-2">
+            <div className="px-5 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
+              <h3 className="text-base font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
                 {format(selectedDay, 'MM月dd日')} 活動
               </h3>
               <button 
                 onClick={() => setIsDayModalOpen(false)}
-                className="w-7 h-7 flex items-center justify-center bg-stone-100 text-stone-500 rounded-full hover:bg-stone-200 transition-colors"
+                className="w-7 h-7 flex items-center justify-center bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -1569,11 +1572,11 @@ export default function App() {
             
             <div className="p-4 overflow-y-auto space-y-3">
               {selectedDayEvents.length === 0 ? (
-                <div className="bg-stone-50 border border-dashed border-stone-200 rounded-2xl p-10 text-center">
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 text-stone-300 shadow-sm">
+                <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-200 dark:border-stone-700 rounded-2xl p-10 text-center">
+                  <div className="w-12 h-12 bg-white dark:bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-3 text-stone-300 dark:text-stone-600 shadow-sm">
                     <CalendarIcon size={24} />
                   </div>
-                  <p className="text-stone-400 text-sm font-bold">這天沒有安排活動</p>
+                  <p className="text-stone-400 dark:text-stone-500 text-sm font-bold">這天沒有安排活動</p>
                   <button 
                     onClick={() => {
                       setIsDayModalOpen(false);
@@ -1585,7 +1588,7 @@ export default function App() {
                       });
                       setIsModalOpen(true);
                     }}
-                    className="mt-4 text-xs font-black text-indigo-600 hover:underline"
+                    className="mt-4 text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline"
                   >
                     + 點擊新增活動
                   </button>
@@ -1593,7 +1596,7 @@ export default function App() {
               ) : (
                 <>
                   {selectedDayEvents.map(event => (
-                    <div key={event.id} className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100 flex items-start gap-4">
+                    <div key={event.id} className="bg-white dark:bg-stone-800 rounded-2xl p-4 shadow-sm border border-stone-100 dark:border-stone-700 flex items-start gap-4">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner" style={{ backgroundColor: `${event.color}15`, color: event.color }}>
                         {getEventIcon(event.title || '', 20) || <User size={20} />}
                       </div>
