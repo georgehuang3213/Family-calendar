@@ -196,6 +196,8 @@ export default function App() {
   const [eventToDeleteObj, setEventToDeleteObj] = useState<Event | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
+  const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
+  const pendingQuickLeaves = useRef<Set<string>>(new Set());
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark';
@@ -281,25 +283,48 @@ export default function App() {
   };
 
   const handleQuickLeave = async (member: string) => {
+    const dateStr = format(selectedDay, 'yyyy-MM-dd');
+    const lockKey = `${member}-${dateStr}`;
+    
+    // 1. 防止重複點擊 (鎖定)
+    if (pendingQuickLeaves.current.has(lockKey)) return;
+    
+    // 2. 檢查是否已經有該成員在該天的排休
+    const alreadyHasLeave = events.some(e => 
+      e.member_name === member && 
+      e.start_date === dateStr && 
+      (e.title.includes('排休') || e.title.includes('休假'))
+    );
+    
+    if (alreadyHasLeave) {
+      showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有排休了`, 'error');
+      return;
+    }
+
+    pendingQuickLeaves.current.add(lockKey);
+    
     const eventColor = MEMBER_COLORS[member] || '#4F46E5';
     const leaveEvent = {
       title: '排休',
       description: '',
-      start_date: format(selectedDay, 'yyyy-MM-dd'),
-      end_date: format(selectedDay, 'yyyy-MM-dd'),
+      start_date: dateStr,
+      end_date: dateStr,
       time: '',
       member_name: member,
       color: eventColor,
       action: 'create',
     };
 
-    const tempId = Date.now();
-    const optimisticEvent = { ...leaveEvent, id: tempId };
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEvent = { ...leaveEvent, id: tempId, syncing: true };
     
-    const previousEvents = [...events];
-    setEvents([...events, optimisticEvent]);
-    showToast(`已快速新增 ${member} 排休`);
+    setEvents(prev => [...prev, optimisticEvent]);
+    showToast(`正在新增 ${member} 排休...`);
     setIsDayModalOpen(false);
+    
+    if (filterMember !== '全部' && filterMember !== member) {
+      setFilterMember(member);
+    }
 
     try {
       const res = await fetch('/api/events', {
@@ -314,19 +339,25 @@ export default function App() {
         result = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(`伺服器傳回非 JSON 回應: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
+        throw new Error(`伺服器回應異常`);
       }
 
       if (!res.ok) throw new Error(result.error || '快速新增失敗');
       
+      showToast(`已成功新增 ${member} 排休`);
+      
       if (result.id) {
-        setEvents(prev => prev.map(e => String(e.id) === String(tempId) ? { ...e, id: result.id } : e));
+        setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
       }
       
-      fetchEvents(false);
+      // 稍微延遲重新抓取，確保後端同步完成
+      setTimeout(() => fetchEvents(false), 500);
     } catch (err: any) {
-      setEvents(previousEvents);
-      showToast(`快速新增失敗: ${err.message}`, 'error');
+      console.error("Quick Leave Error:", err);
+      showToast(`新增失敗: ${err.message}`, 'error');
+      setEvents(prev => prev.filter(e => String(e.id) !== tempId));
+    } finally {
+      pendingQuickLeaves.current.delete(lockKey);
     }
   };
 
@@ -957,6 +988,22 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+              {/* 一鍵排休開關 */}
+              <button
+                onClick={() => setIsQuickLeaveEnabled(!isQuickLeaveEnabled)}
+                className={cn(
+                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
+                  isQuickLeaveEnabled 
+                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
+                    : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+                )}
+              >
+                <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
+                一鍵排休
+              </button>
+
+              <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
+
               {['全部', ...FAMILY_MEMBERS].map(member => (
                 <button
                   key={member}
@@ -997,20 +1044,6 @@ export default function App() {
                 title={isDarkMode ? "切換為淺色模式" : "切換為深色模式"}
               >
                 {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-
-              {/* 一鍵排休開關 */}
-              <button
-                onClick={() => setIsQuickLeaveEnabled(!isQuickLeaveEnabled)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
-                  isQuickLeaveEnabled 
-                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-sm"
-                    : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700"
-                )}
-              >
-                <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
-                一鍵排休
               </button>
             </div>
 
@@ -1200,7 +1233,15 @@ export default function App() {
                     key={day.toString()} 
                     onClick={() => {
                       setSelectedDay(day);
-                      if (!isQuickLeaveEnabled) {
+                      if (isQuickLeaveEnabled) {
+                        if (filterMember !== '全部') {
+                          // 如果已選擇特定成員，直接排休
+                          handleQuickLeave(filterMember);
+                        } else {
+                          // 如果是全部成員，開啟快速選擇視窗
+                          setIsQuickSelectOpen(true);
+                        }
+                      } else {
                         setIsDayModalOpen(true);
                       }
                     }}
@@ -1299,7 +1340,8 @@ export default function App() {
                               }}
                               className={cn(
                                 "py-0.5 text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[20px]",
-                                isLeave && "ring-1 ring-inset ring-white/20"
+                                isLeave && "ring-1 ring-inset ring-white/20",
+                                (event as any).syncing && "opacity-50 animate-pulse"
                               )}
                             >
                               {icon && <span className="shrink-0">{icon}</span>}
@@ -1348,7 +1390,10 @@ export default function App() {
                                 paddingRight: isEnd || !isMultiDay ? '4px' : '6px',
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
-                              className="py-0.5 text-[8px] font-bold truncate h-[14px] flex items-center gap-0.5"
+                              className={cn(
+                                "py-0.5 text-[8px] font-bold truncate h-[14px] flex items-center gap-0.5",
+                                (event as any).syncing && "opacity-50 animate-pulse"
+                              )}
                             >
                               {icon && <span className="shrink-0">{icon}</span>}
                               <span className="truncate">{eventTitle}</span>
@@ -1369,27 +1414,49 @@ export default function App() {
           </div>
         )}
 
-        {/* 一鍵排休區塊 */}
-        {viewMode === 'calendar' && isQuickLeaveEnabled && (
-          <div className="mt-4 bg-white dark:bg-stone-900 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap size={16} className="text-amber-500" />
-              <h3 className="text-xs font-black text-stone-700 dark:text-stone-300 uppercase tracking-widest">
-                快速新增排休 ({format(selectedDay, 'MM/dd')})
-              </h3>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {FAMILY_MEMBERS.map(member => (
-                <button
-                  key={member}
-                  onClick={() => handleQuickLeave(member)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700"
-                  style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
+        {/* Quick Select Modal for Quick Leave */}
+        {isQuickSelectOpen && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4"
+            onClick={() => setIsQuickSelectOpen(false)}
+          >
+            <div 
+              className="bg-white dark:bg-stone-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200 border border-stone-100 dark:border-stone-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap size={18} className="text-amber-500" />
+                  <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest">
+                    快速排休 ({format(selectedDay, 'MM/dd')})
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setIsQuickSelectOpen(false)}
+                  className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
                 >
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
-                  {member}排休
+                  <X size={20} />
                 </button>
-              ))}
+              </div>
+              <div className="p-5">
+                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">選擇要排休的成員：</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {FAMILY_MEMBERS.map(member => (
+                    <button
+                      key={member}
+                      onClick={() => {
+                        handleQuickLeave(member);
+                        setIsQuickSelectOpen(false);
+                      }}
+                      className="px-4 py-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98]"
+                      style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
+                    >
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                      {member}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
