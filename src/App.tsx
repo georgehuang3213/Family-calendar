@@ -712,7 +712,7 @@ export default function App() {
       isDarkMode && "dark"
     )}>
       {/* Header - Simplified for Mobile */}
-      <header className="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
+      <header className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
             <CalendarIcon size={16} className="md:hidden" />
@@ -997,8 +997,8 @@ export default function App() {
 
         {/* Calendar Grid (Desktop & Mobile Calendar Mode) */}
         {(viewMode === 'calendar') && (
-          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/50">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800">
+            <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-800/80 backdrop-blur-md sticky top-[56px] md:top-[72px] z-30 rounded-t-2xl">
               {['日', '一', '二', '三', '四', '五', '六'].map(day => (
                 <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">
                   {day}
@@ -1006,7 +1006,7 @@ export default function App() {
               ))}
             </div>
             
-            <div className="grid grid-cols-7 relative">
+            <div className="grid grid-cols-7 relative rounded-b-2xl overflow-hidden">
               {calendarDays.map((day, i) => {
                 // Sort events for consistent lane assignment if needed, 
                 // but we'll primarily use the pre-calculated eventLanes.
@@ -1368,7 +1368,7 @@ export default function App() {
               .filter((date): date is string => typeof date === 'string' && isSameMonth(safeParseISO(date), currentDate))
               .map(date => (
                 <div key={date}>
-                  <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-16 md:top-24 bg-stone-50 dark:bg-stone-950 py-2 z-10">
+                  <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10">
                     {format(safeParseISO(date), 'MM月dd日 EEEE')}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

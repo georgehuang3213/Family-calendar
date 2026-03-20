@@ -9,6 +9,127 @@ dotenv.config();
 
 let db_local: any = null;
 
+// Caching logic
+let eventsCache: { data: any, timestamp: number } | null = null;
+const CACHE_TTL = 60 * 1000; // 60 seconds (fresh)
+const STALE_TTL = 5 * 60 * 1000; // 5 minutes (stale but usable)
+let isFetchingInBackground = false;
+
+function clearEventsCache() {
+  console.log("🧹 Clearing events cache");
+  eventsCache = null;
+}
+
+// Reusable fetch logic
+async function fetchEventsInternal() {
+  let events: any[] = [];
+  const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+  let source = "unknown";
+  let appsScriptWarning: string | undefined = undefined;
+
+  // Priority 1: Google Apps Script
+  if (APPS_SCRIPT_URL) {
+    try {
+      console.log("📡 Fetching events from Apps Script...");
+      const response = await axios.get(APPS_SCRIPT_URL, { timeout: 15000 });
+      
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        throw new Error("Apps Script returned HTML instead of JSON.");
+      }
+
+      if (Array.isArray(response.data)) {
+        events = response.data;
+        source = "google_apps_script";
+      } else if (response.data && Array.isArray(response.data.events)) {
+        events = response.data.events;
+        source = "google_apps_script";
+      }
+    } catch (e: any) {
+      console.error("❌ Apps Script Fetch Error:", e.message);
+      appsScriptWarning = e.message;
+    }
+  }
+
+  // Priority 2: Direct Sheets API
+  if (events.length === 0 && sheetInitStatus.success) {
+    try {
+      console.log("📡 Fetching events from Direct Sheets API...");
+      const sheets = await getSheets();
+      if (sheets) {
+        const mainResponse = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: RANGE,
+        });
+        
+        let leavesRows: any[][] = [];
+        try {
+          const leavesResponse = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: LEAVES_RANGE,
+          });
+          leavesRows = leavesResponse.data.values || [];
+        } catch (e) {}
+
+        const mainRows = mainResponse.data.values || [];
+
+        const processRows = (rows: any[][], sheetName: string) => {
+          if (!rows || rows.length <= 1) return [];
+          const rawHeaders = rows[0];
+          return rows.slice(1).map((row, index) => {
+            const event: any = { id: `${sheetName}-${index + 1}` };
+            rawHeaders.forEach((rawHeader, i) => {
+              const normalized = String(rawHeader).toLowerCase().trim().replace(/[_\s]/g, '');
+              const value = row[i] || "";
+              if (normalized === 'id') event.id = value;
+              else if (normalized === 'title') event.title = value;
+              else if (normalized === 'description') event.description = value;
+              else if (normalized === 'startdate') event.start_date = value;
+              else if (normalized === 'enddate') event.end_date = value;
+              else if (normalized === 'time') event.time = value;
+              else if (normalized === 'membername') event.member_name = value;
+              else if (normalized === 'color') event.color = value;
+              event[rawHeader] = value;
+            });
+            if (!event.title) event.title = "無標題";
+            if (!event.start_date) event.start_date = new Date().toISOString().split('T')[0];
+            if (!event.end_date) event.end_date = event.start_date;
+            if (!event.member_name) event.member_name = "全家";
+            if (!event.color) event.color = "#4F46E5";
+            return event;
+          });
+        };
+
+        events = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
+        source = "google_sheets_api";
+      }
+    } catch (e: any) {
+      console.error("❌ Sheets API Fetch Error:", e.message);
+    }
+  }
+
+  // Priority 3: SQLite
+  if (events.length === 0 && db_local) {
+    try {
+      console.log("📡 Fetching from local SQLite fallback...");
+      const rows = db_local.prepare("SELECT * FROM events").all();
+      events = rows.map((row: any) => ({ ...row, id: String(row.id) }));
+      source = "sqlite_fallback";
+    } catch (e: any) {
+      console.error("❌ SQLite Fetch Error:", e.message);
+    }
+  }
+
+  const result = {
+    events,
+    source,
+    timestamp: new Date().toISOString(),
+    warning: appsScriptWarning
+  };
+
+  eventsCache = { data: result, timestamp: Date.now() };
+  return result;
+}
+
 // Google Sheets setup (Lazy Initialization)
 let sheetsInstance: any = null;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -211,152 +332,39 @@ async function startServer() {
     // Ensure sheet is initialized on first request
     await initializeSheet();
     
-    let events: any[] = [];
-    const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
-    let appsScriptWarning: string | undefined = undefined;
-
-    // Priority 1: Google Apps Script
-    if (APPS_SCRIPT_URL) {
-      try {
-        console.log("Fetching events from Apps Script...");
-        const response = await axios.get(APPS_SCRIPT_URL, { timeout: 10000 });
+    const forceRefresh = req.query.refresh === 'true';
+    const now = Date.now();
+    
+    // Check cache (Stale-While-Revalidate)
+    if (!forceRefresh && eventsCache) {
+      const age = now - eventsCache.timestamp;
+      
+      if (age < CACHE_TTL) {
+        console.log("🚀 Serving events from cache (Fresh)");
+        return res.json({ ...eventsCache.data, cached: true });
+      } else if (age < STALE_TTL) {
+        console.log("🚀 Serving events from cache (Stale) - Triggering background refresh");
+        // Return stale data immediately
+        res.json({ ...eventsCache.data, cached: true, stale: true });
         
-        if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-          throw new Error("Apps Script 傳回了 HTML 而非 JSON，請檢查 Apps Script 是否已正確部署為「網頁應用程式」並設定為「任何人」皆可存取。");
+        // Trigger background refresh
+        if (!isFetchingInBackground) {
+          isFetchingInBackground = true;
+          fetchEventsInternal().finally(() => {
+            isFetchingInBackground = false;
+            console.log("✅ Background refresh complete");
+          });
         }
-        
-        if (Array.isArray(response.data)) {
-          return res.json({ events: response.data, source: "google_apps_script" });
-        } else if (response.data && Array.isArray(response.data.events)) {
-          return res.json({ events: response.data.events, source: "google_apps_script" });
-        } else if (response.data && response.data.error) {
-          throw new Error(response.data.error);
-        } else {
-          console.warn("Apps Script returned unexpected format:", typeof response.data === 'string' ? response.data.substring(0, 100) : response.data);
-          throw new Error("Apps Script 傳回的資料格式不符合預期。");
-        }
-      } catch (error: any) {
-        console.error("Apps Script Fetch Error:", error.message);
-        appsScriptWarning = error.message;
+        return;
       }
     }
-
-    // Priority 2: Direct Google Sheets API (Only if initialized successfully)
-    if (sheetInitStatus.success) {
-      try {
-        const sheets = await getSheets();
-        if (!sheets) throw new Error("Sheets instance not available");
-        
-        // Fetch Main Sheet
-        const mainResponse = await sheets.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: RANGE,
-        });
-        
-        // Fetch Leaves Sheet (Optional)
-        let leavesRows: any[][] = [];
-        try {
-          const leavesResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: LEAVES_RANGE,
-          });
-          leavesRows = leavesResponse.data.values || [];
-        } catch (e: any) {
-          console.warn("Leaves sheet not found or inaccessible, skipping:", e.message);
-        }
-
-        const mainRows = mainResponse.data.values || [];
-
-        const processRows = (rows: any[][], sheetName: string) => {
-          if (!rows || rows.length <= 1) return [];
-          const rawHeaders = rows[0];
-          // Normalize headers: lowercase, trim, and remove underscores/spaces for matching
-          const headers = rawHeaders.map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
-          
-          return rows.slice(1).map((row, index) => {
-            const event: any = { 
-              id: `${sheetName}-${index + 1}`,
-              _sheet: sheetName,
-              _index: index + 1 
-            };
-            
-            rawHeaders.forEach((rawHeader, i) => {
-              const normalized = String(rawHeader).toLowerCase().trim().replace(/[_\s]/g, '');
-              const value = row[i] || "";
-              
-              // Map normalized headers to our expected keys
-              if (normalized === 'id') event.id = value;
-              else if (normalized === 'title') event.title = value;
-              else if (normalized === 'description') event.description = value;
-              else if (normalized === 'startdate') event.start_date = value;
-              else if (normalized === 'enddate') event.end_date = value;
-              else if (normalized === 'time') event.time = value;
-              else if (normalized === 'membername') event.member_name = value;
-              else if (normalized === 'color') event.color = value;
-              // Also keep original for compatibility
-              event[rawHeader] = value;
-            });
-            
-            // Fallback if no ID column exists
-            if (!event.id || event.id === `${sheetName}-${index + 1}`) {
-              event.id = `${sheetName}-${index + 1}`;
-            }
-            
-            // Defaults and Fallbacks
-            if (!event.title) event.title = "無標題";
-            if (!event.start_date) event.start_date = new Date().toISOString().split('T')[0];
-            if (!event.end_date) event.end_date = event.start_date;
-            if (!event.member_name) event.member_name = "全家";
-            if (!event.color) event.color = "#4F46E5";
-            
-            return event;
-          });
-        };
-
-        const mainEvents = processRows(mainRows, MAIN_SHEET_NAME);
-        const leaveEvents = processRows(leavesRows, LEAVES_SHEET_NAME);
-        
-        events = [...mainEvents, ...leaveEvents];
-        return res.json({ events, source: "google_sheets_api" });
-      } catch (error: any) {
-        console.error("Google Sheets API Fetch Error:", error.message);
-        // Try fallback on error
-        try {
-          if (db_local) {
-            const fallbackRows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
-            return res.json({ 
-              events: fallbackRows, 
-              source: "local_fallback", 
-              warning: `Google Sheets 同步失敗: ${error.message}` 
-            });
-          } else {
-            throw new Error(`Google Sheets 同步失敗: ${error.message}，且本地資料庫不可用。`);
-          }
-        } catch (e: any) {
-          return res.status(500).json({ error: e.message || "Failed to fetch events" });
-        }
-      }
-    }
-
-    // Fallback: SQLite (if SPREADSHEET_ID is not set)
+    
     try {
-      if (db_local) {
-        const rows = db_local.prepare("SELECT * FROM events ORDER BY start_date DESC").all();
-        
-        let warningMsg = undefined;
-        if (typeof appsScriptWarning !== 'undefined') warningMsg = appsScriptWarning;
-        
-        res.json({ events: rows, source: "local", warning: warningMsg });
-      } else {
-        res.status(500).json({ 
-          error: typeof appsScriptWarning !== 'undefined'
-            ? `Apps Script 讀取失敗且無 Sheets API 備援: ${appsScriptWarning}`
-            : "無法取得活動資料。請確認環境變數 (GOOGLE_SHEET_ID 或 GOOGLE_APPS_SCRIPT_URL) 已正確設定。",
-          warning: typeof appsScriptWarning !== 'undefined' ? appsScriptWarning : undefined
-        });
-      }
+      const result = await fetchEventsInternal();
+      return res.json(result);
     } catch (error: any) {
-      res.status(500).json({ error: "Failed to fetch events from local database" });
+      console.error("❌ Final Fetch Error:", error.message);
+      return res.status(500).json({ error: "Failed to fetch events", details: error.message });
     }
   });
 
@@ -387,7 +395,7 @@ async function startServer() {
           id: eventId,
           isLeave: isLeave,
           targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
-        }, { timeout: 12000 });
+        }, { timeout: 15000 });
         
         if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
           throw new Error("Apps Script 傳回了 HTML 而非 JSON。");
@@ -397,6 +405,7 @@ async function startServer() {
           throw new Error(response.data.error);
         }
         
+        clearEventsCache();
         return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
       } catch (error: any) {
         console.error("Apps Script Save Error:", error.message);
@@ -450,6 +459,7 @@ async function startServer() {
           },
         });
 
+        clearEventsCache();
         return res.json({ success: true, source: "google_sheets_api", target: isLeave ? "leaves" : "main", id: eventId });
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
@@ -469,6 +479,7 @@ async function startServer() {
         let warningMsg = undefined;
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
         
+        clearEventsCache();
         return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
       } else {
         return res.status(500).json({ 
@@ -528,27 +539,27 @@ async function startServer() {
           delete updatePayload.id; // Ensure it's not in ...eventData
         }
 
-        let response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 8000 });
+        let response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 15000 });
         
         // Fallback 1: Try the other sheet
         if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
           const fallbackSheet = targetSheet === MAIN_SHEET_NAME ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
           console.log(`ID not found in ${targetSheet}, retrying in ${fallbackSheet}`);
           updatePayload.sheet = fallbackSheet;
-          response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
+          response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 10000 });
           
           // Fallback 2: Try with id = title (in case Apps Script assumes ID is in column A, which is actually title)
           if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
             console.log(`ID still not found, retrying with id = title in ${targetSheet}`);
             updatePayload.sheet = targetSheet;
             updatePayload.id = original_title || title;
-            response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
+            response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 10000 });
             
             // Fallback 3: Try with id = title in the other sheet
             if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
               console.log(`ID still not found, retrying with id = title in ${fallbackSheet}`);
               updatePayload.sheet = fallbackSheet;
-              response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 5000 });
+              response = await axios.post(APPS_SCRIPT_URL, updatePayload, { timeout: 10000 });
             }
           }
         }
@@ -575,6 +586,7 @@ async function startServer() {
           console.error("SQLite Update Error (Sync):", e);
         }
         
+        clearEventsCache();
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
         console.error("Apps Script Update Error, falling back to Sheets API:", error.message);
@@ -685,6 +697,7 @@ async function startServer() {
               values: [finalRow],
             },
           });
+          clearEventsCache();
           return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
         }
       } catch (error: any) {
@@ -702,6 +715,7 @@ async function startServer() {
         `);
         const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
         if (result.changes > 0) {
+          clearEventsCache();
           res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         } else {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
@@ -879,27 +893,27 @@ async function startServer() {
 
         console.log("Sending delete request to Apps Script:", deletePayload);
 
-        let response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 8000 });
+        let response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 15000 });
         
         // Fallback 1: Try the other sheet
         if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
           const fallbackSheet = targetSheet === MAIN_SHEET_NAME ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
           console.log(`ID not found in ${targetSheet}, retrying delete in ${fallbackSheet}`);
           deletePayload.sheet = fallbackSheet;
-          response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
+          response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 10000 });
           
           // Fallback 2: Try with id = title (in case Apps Script assumes ID is in column A, which is actually title)
           if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
             console.log(`ID still not found, retrying with id = title in ${targetSheet}`);
             deletePayload.sheet = targetSheet;
             deletePayload.id = eventTitle;
-            response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
+            response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 10000 });
             
             // Fallback 3: Try with id = title in the other sheet
             if (response.data && response.data.error && response.data.error.includes('找不到 ID')) {
               console.log(`ID still not found, retrying with id = title in ${fallbackSheet}`);
               deletePayload.sheet = fallbackSheet;
-              response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 5000 });
+              response = await axios.post(APPS_SCRIPT_URL, deletePayload, { timeout: 10000 });
             }
           }
         }
@@ -1034,6 +1048,10 @@ async function startServer() {
       return res.status(500).json({ error: `Google Sheets API 刪除失敗: ${results.sheets?.error || '未初始化'}` });
     } else if (gasFailed && !sheetInitStatus.success) {
       return res.status(500).json({ error: `Apps Script 刪除失敗且無 Sheets API 備援: ${results.gas?.error}` });
+    }
+
+    if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
+      clearEventsCache();
     }
 
     res.json({ success: true, results });
