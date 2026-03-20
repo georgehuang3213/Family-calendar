@@ -42,7 +42,14 @@ import {
   Heart,
   Star,
   Plane,
-  Music
+  Music,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  CloudLightning,
+  Snowflake,
+  Wind,
+  Thermometer
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -93,6 +100,53 @@ const MEMBER_COLORS: Record<string, string> = {
   '黃郁慈': '#EA580C', // Orange
   '郭品佑': '#65A30D', // Lime/Olive
   '郭品彤': '#0D9488', // Teal
+};
+
+const WEATHER_ICONS: Record<number, React.ReactNode> = {
+  0: <Sun size={14} className="text-amber-500" />, // Clear sky
+  1: <CloudSun size={14} className="text-amber-400" />, // Mainly clear
+  2: <CloudSun size={14} className="text-stone-400" />, // Partly cloudy
+  3: <Cloud size={14} className="text-stone-500" />, // Overcast
+  45: <Wind size={14} className="text-stone-400" />, // Fog
+  48: <Wind size={14} className="text-stone-400" />, // Depositing rime fog
+  51: <CloudRain size={14} className="text-blue-400" />, // Drizzle: Light
+  53: <CloudRain size={14} className="text-blue-500" />, // Drizzle: Moderate
+  55: <CloudRain size={14} className="text-blue-600" />, // Drizzle: Dense intensity
+  61: <CloudRain size={14} className="text-blue-500" />, // Rain: Slight
+  63: <CloudRain size={14} className="text-blue-600" />, // Rain: Moderate
+  65: <CloudRain size={14} className="text-blue-700" />, // Rain: Heavy intensity
+  71: <Snowflake size={14} className="text-blue-200" />, // Snow fall: Slight
+  73: <Snowflake size={14} className="text-blue-300" />, // Snow fall: Moderate
+  75: <Snowflake size={14} className="text-blue-400" />, // Snow fall: Heavy intensity
+  80: <CloudRain size={14} className="text-blue-500" />, // Rain showers: Slight
+  81: <CloudRain size={14} className="text-blue-600" />, // Rain showers: Moderate
+  82: <CloudRain size={14} className="text-blue-700" />, // Rain showers: Violent
+  95: <CloudLightning size={14} className="text-indigo-500" />, // Thunderstorm: Slight or moderate
+  96: <CloudLightning size={14} className="text-indigo-600" />, // Thunderstorm with slight hail
+  99: <CloudLightning size={14} className="text-indigo-700" />, // Thunderstorm with heavy hail
+};
+const WEATHER_DESCRIPTIONS: Record<number, string> = {
+  0: '晴朗',
+  1: '晴時多雲',
+  2: '多雲',
+  3: '陰天',
+  45: '霧',
+  48: '霧',
+  51: '毛毛雨 (輕微)',
+  53: '毛毛雨 (中等)',
+  55: '毛毛雨 (密集)',
+  61: '雨 (輕微)',
+  63: '雨 (中等)',
+  65: '雨 (大雨)',
+  71: '雪 (輕微)',
+  73: '雪 (中等)',
+  75: '雪 (大雪)',
+  80: '陣雨 (輕微)',
+  81: '陣雨 (中等)',
+  82: '陣雨 (大雨)',
+  95: '雷陣雨',
+  96: '雷陣雨伴有冰雹',
+  99: '雷陣雨伴有強烈冰雹',
 };
 const COLORS = [
   { name: 'Indigo', value: '#4F46E5' },
@@ -148,6 +202,9 @@ export default function App() {
     }
     return false;
   });
+  const [weatherData, setWeatherData] = useState<any>(null);
+  const [dynamicHolidays, setDynamicHolidays] = useState<Record<string, string>>({});
+  const [makeupWorkdays, setMakeupWorkdays] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isDarkMode) {
@@ -290,7 +347,82 @@ export default function App() {
   useEffect(() => {
     fetchEvents();
     fetchConfigStatus();
+    fetchWeather();
+    fetchHolidays(2026);
   }, []);
+
+  const fetchWeather = async () => {
+    try {
+      // Default to Taichung coordinates
+      const lat = 24.1477;
+      const lon = 120.6736;
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTaipei`);
+      if (!response.ok) return;
+      const text = await response.text();
+      if (!text) return;
+      const data = JSON.parse(text);
+      if (data && data.daily) {
+        const mapped: Record<string, any> = {};
+        data.daily.time.forEach((time: string, i: number) => {
+          mapped[time] = {
+            code: data.daily.weathercode[i],
+            max: data.daily.temperature_2m_max[i],
+            min: data.daily.temperature_2m_min[i]
+          };
+        });
+        setWeatherData(mapped);
+      }
+    } catch (e) {
+      console.error("Weather fetch error:", e);
+    }
+  };
+
+  const fetchHolidays = async (year: number) => {
+    try {
+      // Fetch from our local API which proxies the Taiwan Government Open Data
+      const response = await fetch(`/api/taiwan-calendar?year=${year}`);
+      if (!response.ok) {
+        // Fallback to Nager.Date if our local API fails
+        const fallbackResponse = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/TW`);
+        if (fallbackResponse.ok) {
+          const text = await fallbackResponse.text();
+          if (text) {
+            const data = JSON.parse(text);
+            const holidayMap: Record<string, string> = {};
+            data.forEach((h: any) => {
+              if (h.date) holidayMap[h.date] = h.localName || h.name;
+            });
+            setDynamicHolidays(prev => ({ ...prev, ...holidayMap }));
+          }
+        }
+        return;
+      }
+      
+      const text = await response.text();
+      if (!text) return;
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("Failed to parse Taiwan calendar JSON:", parseError);
+        return;
+      }
+
+      if (data.holidays) {
+        setDynamicHolidays(prev => ({ ...prev, ...data.holidays }));
+      }
+      if (data.makeupWorkdays) {
+        setMakeupWorkdays(prev => ({ ...prev, ...data.makeupWorkdays }));
+      }
+    } catch (e) {
+      console.error("Holiday fetch error:", e);
+    }
+  };
+
+  const allHolidays = useMemo(() => {
+    return { ...HOLIDAYS_2026, ...dynamicHolidays };
+  }, [dynamicHolidays]);
 
   const fetchConfigStatus = async () => {
     try {
@@ -1055,8 +1187,13 @@ export default function App() {
                 const isToday = isSameDay(day, new Date());
                 const isCurrentMonth = isSameMonth(day, monthStart);
                 const isSelected = isSameDay(day, selectedDay);
+                const dayOfWeek = day.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
                 const dateKey = format(day, 'yyyy-MM-dd');
-                const holidayName = HOLIDAYS_2026[dateKey];
+                const holidayName = allHolidays[dateKey];
+                const isHoliday = holidayName !== undefined;
+                const makeupWorkdayName = makeupWorkdays[dateKey];
+                const weather = weatherData?.[dateKey];
 
                 return (
                   <div 
@@ -1073,21 +1210,46 @@ export default function App() {
                       "min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 dark:border-stone-800 last:border-r-0 transition-all cursor-pointer relative",
                       !isCurrentMonth && "bg-stone-50/30 dark:bg-stone-800/30",
                       isSelected && "bg-indigo-50/50 dark:bg-indigo-900/20 ring-2 ring-inset ring-indigo-400 z-10",
-                      holidayName && "bg-rose-50/30 dark:bg-rose-900/10"
+                      isHoliday && "bg-rose-50/30 dark:bg-rose-900/10",
+                      makeupWorkdayName && "bg-stone-100/50 dark:bg-stone-800/50"
                     )}
                   >
                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 md:mb-2 gap-1">
-                      <span className={cn(
-                        "w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-xs md:text-sm font-bold",
-                        isToday ? "bg-indigo-600 text-white shadow-md" : holidayName ? "text-rose-600 dark:text-rose-400" : isCurrentMonth ? "text-stone-900 dark:text-stone-100" : "text-stone-300 dark:text-stone-600"
-                      )}>
-                        {format(day, 'd')}
-                      </span>
-                      {holidayName && (
-                        <span className="text-[8px] md:text-[10px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
-                          {holidayName}
+                      <div className="flex items-center gap-1">
+                        <span className={cn(
+                          "w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-xs md:text-sm font-bold",
+                          isToday ? "bg-indigo-600 text-white shadow-md" : (isHoliday || isWeekend) ? "text-rose-600 dark:text-rose-400" : isCurrentMonth ? "text-stone-900 dark:text-stone-100" : "text-stone-300 dark:text-stone-600"
+                        )}>
+                          {format(day, 'd')}
                         </span>
-                      )}
+                        {weather && (
+                          <div className="flex items-center gap-0.5 group relative">
+                            {WEATHER_ICONS[weather.code]}
+                            <span className="hidden md:block text-[8px] text-stone-400 font-medium">
+                              {Math.round(weather.min)}°~{Math.round(weather.max)}°
+                            </span>
+                            {/* Tooltip for mobile or extra info */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[10px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-amber-400">{WEATHER_DESCRIPTIONS[weather.code] || '未知天氣'}</span>
+                                <span className="opacity-90">{Math.round(weather.min)}°C ~ {Math.round(weather.max)}°C</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {holidayName && (
+                          <span className="text-[8px] md:text-[10px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
+                            {holidayName}
+                          </span>
+                        )}
+                        {makeupWorkdayName && (
+                          <span className="text-[8px] md:text-[10px] font-black text-stone-500 dark:text-stone-400 truncate bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700">
+                            {makeupWorkdayName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="flex flex-col gap-0.5 md:gap-1 relative z-20">

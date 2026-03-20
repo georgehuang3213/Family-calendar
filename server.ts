@@ -11,8 +11,10 @@ let db_local: any = null;
 
 // Caching logic
 let eventsCache: { data: any, timestamp: number } | null = null;
+let taiwanCalendarCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_TTL = 60 * 1000; // 60 seconds (fresh)
 const STALE_TTL = 5 * 60 * 1000; // 5 minutes (stale but usable)
+const CALENDAR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 let isFetchingInBackground = false;
 
 function clearEventsCache() {
@@ -290,6 +292,148 @@ async function startServer() {
   }
 
   app.use(express.json());
+
+  // Taiwan Government Calendar API
+  app.get("/api/taiwan-calendar", async (req, res) => {
+    const year = req.query.year || new Date().getFullYear();
+    
+    const cacheKey = String(year);
+    // Check cache
+    if (taiwanCalendarCache[cacheKey] && (Date.now() - taiwanCalendarCache[cacheKey].timestamp < CALENDAR_CACHE_TTL)) {
+      return res.json(taiwanCalendarCache[cacheKey].data);
+    }
+
+    try {
+      console.log(`📡 Fetching Taiwan Government Calendar for ${year}...`);
+      
+      let dataArray: any[] | null = null;
+      
+      try {
+        // Primary source: ruyut/TaiwanCalendar (highly reliable open source JSON)
+        const response = await axios.get(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`, { 
+          timeout: 8000
+        });
+        
+        if (Array.isArray(response.data)) {
+          dataArray = response.data.map(item => {
+            // Convert YYYYMMDD to YYYY-MM-DD
+            const dateStr = item.date;
+            const formattedDate = dateStr && dateStr.length === 8 
+              ? `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)}`
+              : dateStr;
+              
+            return {
+              date: formattedDate,
+              isHoliday: item.isHoliday ? '是' : '否',
+              description: item.description
+            };
+          });
+          console.log(`✅ Successfully fetched from primary API (ruyut/TaiwanCalendar) for ${year}`);
+        } else {
+          throw new Error("Invalid data format from primary API");
+        }
+      } catch (primaryError: any) {
+        console.log(`ℹ️ Primary calendar API failed for ${year}: ${primaryError.message}. Trying fallback...`);
+        
+        // Fallback source 1: New Taipei City Open Data
+        try {
+          const fallbackResponse = await axios.get(`https://data.ntpc.gov.tw/api/datasets/308DCD75-6434-45BC-A95F-5844F0B8430F/json?size=2000`, { 
+            timeout: 8000,
+            headers: { 
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+          });
+          
+          let rawData = fallbackResponse.data;
+          
+          if (typeof rawData === 'string') {
+            if (rawData.trim().startsWith('<!DOCTYPE html>') || rawData.trim().startsWith('<html')) {
+              throw new Error("Received HTML instead of JSON from government API");
+            }
+            try {
+              rawData = JSON.parse(rawData.trim());
+            } catch (e) {
+              console.log("ℹ️ Failed to parse Taiwan Calendar response as JSON");
+            }
+          }
+
+          dataArray = Array.isArray(rawData) ? rawData : (rawData?.data || rawData?.records || null);
+          if (Array.isArray(dataArray)) {
+            console.log("✅ Successfully fetched from fallback API 1 (New Taipei City)");
+          } else {
+            throw new Error("Invalid data format from fallback API 1");
+          }
+        } catch (fallback1Error: any) {
+          console.log(`ℹ️ Fallback 1 calendar API failed: ${fallback1Error.message}. Trying fallback 2...`);
+          
+          // Fallback source 2: Nager.Date API
+          try {
+            const fallback2Response = await axios.get(`https://date.nager.at/api/v3/PublicHolidays/${year}/TW`, { timeout: 5000 });
+            if (Array.isArray(fallback2Response.data)) {
+              // Map Nager.Date format to our expected format
+              dataArray = fallback2Response.data.map((h: any) => ({
+                date: h.date,
+                isHoliday: '是',
+                description: h.localName || h.name
+              }));
+              console.log("✅ Successfully fetched from fallback API 2 (Nager.Date)");
+            } else {
+              throw new Error("Invalid data format from fallback API 2");
+            }
+          } catch (fallback2Error: any) {
+            console.log("ℹ️ Fallback 2 calendar API also failed:", fallback2Error.message);
+          }
+        }
+      }
+
+      if (Array.isArray(dataArray)) {
+        const holidays: Record<string, string> = {};
+        const makeupWorkdays: Record<string, string> = {};
+
+        dataArray.forEach((item: any) => {
+          const dateStr = item.date || item.Date;
+          if (!dateStr) return;
+
+          const normalizedDate = dateStr.replace(/\//g, '-');
+          const isHoliday = item.isHoliday === '是' || item.isHoliday === true;
+          const description = item.description || item.holidayCategory || "";
+          
+          const dateObj = new Date(normalizedDate);
+          if (isNaN(dateObj.getTime())) return;
+
+          const dayOfWeek = dateObj.getDay();
+
+          if (isHoliday) {
+            if (description) {
+              holidays[normalizedDate] = description;
+            } else if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+              holidays[normalizedDate] = "放假";
+            } else {
+              holidays[normalizedDate] = ""; 
+            }
+          } else {
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+              makeupWorkdays[normalizedDate] = description || "補行上班";
+            }
+          }
+        });
+
+        const result = { holidays, makeupWorkdays };
+        taiwanCalendarCache[cacheKey] = { data: result, timestamp: Date.now() };
+        res.json(result);
+      } else {
+        console.warn(`⚠️ Could not retrieve calendar data for ${year} from any source. Returning empty data.`);
+        const result = { holidays: {}, makeupWorkdays: {} };
+        taiwanCalendarCache[cacheKey] = { data: result, timestamp: Date.now() };
+        res.json(result);
+      }
+    } catch (e: any) {
+      console.error("❌ Taiwan Calendar Fetch Error:", e.message);
+      // Fallback to empty if API fails
+      res.status(500).json({ error: "Failed to fetch government calendar", details: e.message });
+    }
+  });
 
   // API Routes
   app.get("/api/debug", (req, res) => {
@@ -569,7 +713,12 @@ async function startServer() {
         }
         
         if (response.data && response.data.error) {
-          throw new Error(response.data.error);
+          if (response.data.error.includes('找不到 ID')) {
+            console.log(`ℹ️ ID ${id} not found in Apps Script. Will try fallback methods.`);
+            throw new Error(`NOT_FOUND:${response.data.error}`);
+          } else {
+            throw new Error(response.data.error);
+          }
         }
         
         // Update local SQLite as well to keep it in sync
@@ -589,8 +738,13 @@ async function startServer() {
         clearEventsCache();
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
-        console.error("Apps Script Update Error, falling back to Sheets API:", error.message);
-        var appsScriptUpdateWarning = error.message;
+        if (error.message && error.message.startsWith('NOT_FOUND:')) {
+          console.log(`ℹ️ Apps Script Update: ${error.message.replace('NOT_FOUND:', '')}. Falling back to Sheets API.`);
+          // Don't set appsScriptUpdateWarning for NOT_FOUND so we don't show a scary warning in the UI
+        } else {
+          console.error("Apps Script Update Error, falling back to Sheets API:", error.message);
+          var appsScriptUpdateWarning = error.message;
+        }
       }
     }
 
@@ -923,13 +1077,23 @@ async function startServer() {
         }
         
         if (response.data && response.data.error) {
-          throw new Error(response.data.error);
+          if (response.data.error.includes('找不到 ID')) {
+            console.log(`ℹ️ ID ${id} not found in Apps Script for deletion. Will try fallback methods.`);
+            throw new Error(`NOT_FOUND:${response.data.error}`);
+          } else {
+            throw new Error(response.data.error);
+          }
         }
         
         results.gas = { success: true };
       } catch (error: any) {
-        console.error("Apps Script Delete Error:", error.message);
-        results.gas = { success: false, error: error.message };
+        if (error.message && error.message.startsWith('NOT_FOUND:')) {
+          console.log(`ℹ️ Apps Script Delete: ${error.message.replace('NOT_FOUND:', '')}. Falling back to Sheets API.`);
+          results.gas = { success: false, error: error.message.replace('NOT_FOUND:', '') };
+        } else {
+          console.error("Apps Script Delete Error:", error.message);
+          results.gas = { success: false, error: error.message };
+        }
         // Do not return 500 here, allow fallback to Google Sheets API
       }
     }
@@ -1040,6 +1204,20 @@ async function startServer() {
     const gasFailed = APPS_SCRIPT_URL && results.gas?.success === false;
     const sheetsFailed = SPREADSHEET_ID && (results.sheets?.success === false || (!sheetInitStatus.success && !results.sheets));
     
+    // If it was successfully deleted from SQLite, we consider it a success even if Google Sheets failed
+    // (This happens for local-only events)
+    if (results.sqlite?.success) {
+      clearEventsCache();
+      
+      // If the error was just "not found", don't show a warning as it's expected for local-only events
+      const isJustNotFound = (results.gas?.error && results.gas.error.includes('找不到 ID')) || 
+                             (results.sheets?.error && results.sheets.error.includes('找不到'));
+                             
+      const shouldWarn = (gasFailed || sheetsFailed) && !isJustNotFound;
+      
+      return res.json({ success: true, results, warning: shouldWarn ? "已從本地刪除，但 Google 試算表同步失敗" : undefined });
+    }
+    
     if (gasFailed && sheetsFailed) {
       return res.status(500).json({ error: `刪除失敗: Apps Script (${results.gas?.error}), Sheets API (${results.sheets?.error || '未初始化'})` });
     } else if (gasFailed && !SPREADSHEET_ID) {
@@ -1050,7 +1228,7 @@ async function startServer() {
       return res.status(500).json({ error: `Apps Script 刪除失敗且無 Sheets API 備援: ${results.gas?.error}` });
     }
 
-    if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
+    if (results.gas?.success || results.sheets?.success) {
       clearEventsCache();
     }
 
