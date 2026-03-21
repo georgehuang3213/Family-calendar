@@ -1913,10 +1913,22 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
-              <h3 className="text-base font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
-                {format(selectedDay, 'MM月dd日')} 活動
-              </h3>
+              <div className="flex flex-col">
+                <h3 className="text-base font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
+                  <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
+                  {format(selectedDay, 'MM月dd日')} 活動
+                </h3>
+                {weatherData?.[format(selectedDay, 'yyyy-MM-dd')] && (
+                  <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
+                    <span className="text-stone-400 dark:text-stone-500">
+                      {WEATHER_ICONS[weatherData[format(selectedDay, 'yyyy-MM-dd')].code]}
+                    </span>
+                    <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400">
+                      {WEATHER_DESCRIPTIONS[weatherData[format(selectedDay, 'yyyy-MM-dd')].code]} · {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].min)}°C ~ {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].max)}°C
+                    </span>
+                  </div>
+                )}
+              </div>
               <button 
                 onClick={() => setIsDayModalOpen(false)}
                 className="w-7 h-7 flex items-center justify-center bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
