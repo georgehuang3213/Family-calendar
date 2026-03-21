@@ -49,7 +49,8 @@ import {
   CloudLightning,
   Snowflake,
   Wind,
-  Thermometer
+  Thermometer,
+  MapPin
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -205,6 +206,7 @@ export default function App() {
     return false;
   });
   const [weatherData, setWeatherData] = useState<any>(null);
+  const [currentWeather, setCurrentWeather] = useState<any>(null);
   const [dynamicHolidays, setDynamicHolidays] = useState<Record<string, string>>({});
   const [makeupWorkdays, setMakeupWorkdays] = useState<Record<string, string>>({});
 
@@ -387,18 +389,29 @@ export default function App() {
       // Default to Taichung coordinates
       const lat = 24.1477;
       const lon = 120.6736;
-      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTaipei`);
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`);
       if (!response.ok) return;
       const text = await response.text();
       if (!text) return;
       const data = JSON.parse(text);
+      
+      if (data && data.current) {
+        setCurrentWeather({
+          temp: data.current.temperature_2m,
+          humidity: data.current.relative_humidity_2m,
+          code: data.current.weather_code,
+          wind: data.current.wind_speed_10m
+        });
+      }
+
       if (data && data.daily) {
         const mapped: Record<string, any> = {};
         data.daily.time.forEach((time: string, i: number) => {
           mapped[time] = {
             code: data.daily.weathercode[i],
             max: data.daily.temperature_2m_max[i],
-            min: data.daily.temperature_2m_min[i]
+            min: data.daily.temperature_2m_min[i],
+            pop: data.daily.precipitation_probability_max[i]
           };
         });
         setWeatherData(mapped);
@@ -957,6 +970,54 @@ export default function App() {
       </header>
 
       <main className="p-4 md:p-6 max-w-7xl mx-auto">
+        {/* Today's Weather Overview (Mobile Only) */}
+        {currentWeather && (
+          <div className="md:hidden bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Cloud size={120} />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                    <MapPin size={16} />
+                  </div>
+                  <span className="text-sm font-bold tracking-wide">台中市 (Taichung)</span>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
+                  即時天氣
+                </span>
+              </div>
+              
+              <div className="flex items-end justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-5xl font-black tracking-tighter">
+                    {Math.round(currentWeather.temp)}°
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold flex items-center gap-2">
+                      {WEATHER_ICONS[currentWeather.code]}
+                      {WEATHER_DESCRIPTIONS[currentWeather.code]}
+                    </span>
+                    <span className="text-xs font-medium opacity-80">
+                      濕度 {currentWeather.humidity}% | 風速 {currentWeather.wind} km/h
+                    </span>
+                  </div>
+                </div>
+                
+                {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
+                  <div className="text-right">
+                    <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">今日預估</div>
+                    <div className="text-sm font-bold">
+                      {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}° ~ {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Desktop View Toggle (Hidden on Mobile) */}
         <div className="hidden md:flex bg-stone-200 dark:bg-stone-800 p-1 rounded-xl mb-6 w-fit">
           <button 
@@ -1266,14 +1327,26 @@ export default function App() {
                         {weather && (
                           <div className="flex items-center gap-0.5 group relative">
                             {WEATHER_ICONS[weather.code]}
-                            <span className="hidden md:block text-[8px] text-stone-400 font-medium">
-                              {Math.round(weather.min)}°~{Math.round(weather.max)}°
-                            </span>
+                            <div className="hidden md:flex flex-col items-start -space-y-0.5">
+                              <span className="text-[8px] text-stone-400 font-medium">
+                                {Math.round(weather.min)}°~{Math.round(weather.max)}°
+                              </span>
+                              {weather.pop !== undefined && (
+                                <span className="text-[8px] text-blue-500 dark:text-blue-400 font-bold flex items-center gap-0.5">
+                                  <CloudRain size={8} /> {weather.pop}%
+                                </span>
+                              )}
+                            </div>
                             {/* Tooltip for mobile or extra info */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[10px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200">
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-bold text-amber-400">{WEATHER_DESCRIPTIONS[weather.code] || '未知天氣'}</span>
                                 <span className="opacity-90">{Math.round(weather.min)}°C ~ {Math.round(weather.max)}°C</span>
+                                {weather.pop !== undefined && (
+                                  <span className="text-blue-300 font-medium flex items-center gap-1">
+                                    <CloudRain size={10} /> 降雨機率: {weather.pop}%
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1595,10 +1668,31 @@ export default function App() {
             {Array.from(new Set(filteredEvents.map(e => e.start_date)))
               .sort()
               .filter((date): date is string => typeof date === 'string' && isSameMonth(safeParseISO(date), currentDate))
-              .map(date => (
+              .map(date => {
+                const normalizedDateKey = format(safeParseISO(date), 'yyyy-MM-dd');
+                const weather = weatherData?.[normalizedDateKey];
+                return (
                 <div key={date}>
-                  <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10">
-                    {format(safeParseISO(date), 'MM月dd日 EEEE')}
+                  <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10 flex items-center justify-between">
+                    <span>{format(safeParseISO(date), 'MM月dd日 EEEE')}</span>
+                    {weather && (
+                      <div className="flex items-center gap-2 text-[10px] normal-case tracking-normal font-bold">
+                        <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
+                          {WEATHER_ICONS[weather.code]}
+                          {WEATHER_DESCRIPTIONS[weather.code]}
+                        </span>
+                        <span className="text-stone-300 dark:text-stone-700">|</span>
+                        <span className="text-stone-500 dark:text-stone-400">{Math.round(weather.min)}°~{Math.round(weather.max)}°</span>
+                        {weather.pop !== undefined && (
+                          <>
+                            <span className="text-stone-300 dark:text-stone-700">|</span>
+                            <span className="text-blue-500 dark:text-blue-400 flex items-center gap-1">
+                              <CloudRain size={10} /> {weather.pop}%
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {filteredEvents
@@ -1643,7 +1737,7 @@ export default function App() {
                       ))}
                   </div>
                 </div>
-              ))}
+              )})}
             {filteredEvents.filter(e => isSameMonth(safeParseISO(e.start_date), currentDate)).length === 0 && (
               <div className="bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-2xl p-12 text-center">
                 <CalendarIcon size={48} className="mx-auto text-stone-200 dark:text-stone-800 mb-4" />
@@ -1925,6 +2019,11 @@ export default function App() {
                     </span>
                     <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400">
                       {WEATHER_DESCRIPTIONS[weatherData[format(selectedDay, 'yyyy-MM-dd')].code]} · {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].min)}°C ~ {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].max)}°C
+                      {weatherData[format(selectedDay, 'yyyy-MM-dd')].pop !== undefined && (
+                        <span className="ml-1.5 text-blue-500 dark:text-blue-400 font-black">
+                          (降雨 {weatherData[format(selectedDay, 'yyyy-MM-dd')].pop}%)
+                        </span>
+                      )}
                     </span>
                   </div>
                 )}
