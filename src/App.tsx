@@ -485,10 +485,16 @@ export default function App() {
     try {
       const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
       const lunar = solar.getLunar();
+      const jieQi = lunar.getJieQi();
+      
+      let lunarStr = '';
       if (lunar.getDay() === 1) {
-        return `${lunar.getMonthInChinese()}月`;
+        lunarStr = `${lunar.getMonthInChinese()}月`;
+      } else {
+        lunarStr = lunar.getDayInChinese();
       }
-      return lunar.getDayInChinese();
+      
+      return jieQi ? `${lunarStr} ${jieQi}` : lunarStr;
     } catch (e) {
       return '';
     }

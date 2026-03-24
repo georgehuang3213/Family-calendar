@@ -4,6 +4,7 @@ import { google } from "googleapis";
 import dotenv from "dotenv";
 import axios from "axios";
 import { v4 as uuidv4 } from 'uuid';
+import { middleware, Client, WebhookEvent } from '@line/bot-sdk';
 
 dotenv.config();
 
@@ -231,9 +232,44 @@ async function initializeSheet() {
   }
 }
 
+// LINE Configuration
+const lineConfig = {
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
+  channelSecret: process.env.LINE_CHANNEL_SECRET || '',
+};
+
+const lineClient = new Client(lineConfig);
+
+// Helper to send LINE notification
+async function sendLineNotification(message: string) {
+  const groupId = process.env.LINE_GROUP_ID;
+  if (!groupId || !lineConfig.channelAccessToken || lineConfig.channelAccessToken === "YOUR_CHANNEL_ACCESS_TOKEN") {
+    console.log("⚠️ LINE notification skipped: Missing Group ID or Access Token");
+    return;
+  }
+
+  try {
+    await lineClient.pushMessage(groupId, {
+      type: 'text',
+      text: message,
+    });
+    console.log("✅ LINE notification sent to group:", groupId);
+  } catch (err: any) {
+    console.error("❌ LINE notification failed:", err.message);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Request Logger for debugging
+  app.use((req, res, next) => {
+    if (req.url.includes('line')) {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers['x-line-signature'])}`);
+    }
+    next();
+  });
 
   // Initialize SQLite (Optional)
   if (!process.env.VERCEL) {
@@ -291,7 +327,45 @@ async function startServer() {
     console.log("ℹ️ Vercel 環境：略過 SQLite 初始化以避免 native 模組錯誤。");
   }
 
+  // LINE Webhook (Handle both with and without trailing slash)
+  // We add a try-catch block around the middleware to handle the case where
+  // LINE's "Verify" button sends a dummy request that might fail signature validation
+  app.post(['/api/line/webhook', '/api/line/webhook/'], (req, res, next) => {
+    // If it's a test request from LINE (often empty or invalid signature during "Verify")
+    // We just return 200 OK to pass the verification
+    if (!req.headers['x-line-signature']) {
+      console.log("⚠️ Received LINE Webhook without signature. Likely a verification request.");
+      return res.status(200).send("OK");
+    }
+    next();
+  }, middleware(lineConfig), (req, res) => {
+    console.log("📩 Received LINE Webhook event");
+    Promise.all(req.body.events.map(handleLineEvent))
+      .then(() => res.json({ success: true }))
+      .catch((err) => {
+        console.error("❌ LINE Webhook Error:", err);
+        res.status(500).end();
+      });
+  });
+
+  // GET route for simple verification check
+  app.get(['/api/line/webhook', '/api/line/webhook/'], (req, res) => {
+    res.send("LINE Webhook endpoint is active. Please use POST for actual events.");
+  });
+
   app.use(express.json());
+
+  async function handleLineEvent(event: WebhookEvent) {
+    if (event.type === 'join' && event.source.type === 'group') {
+      const groupId = event.source.groupId;
+      console.log("🤖 Bot joined group:", groupId);
+      return lineClient.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `大家好！本群組的 ID 是：\n${groupId}\n請將此 ID 填入系統設定中。`,
+      });
+    }
+    return Promise.resolve(null);
+  }
 
   // Taiwan Government Calendar API
   app.get("/api/taiwan-calendar", async (req, res) => {
@@ -550,6 +624,8 @@ async function startServer() {
         }
         
         clearEventsCache();
+        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
+        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
       } catch (error: any) {
         console.error("Apps Script Save Error:", error.message);
@@ -604,6 +680,8 @@ async function startServer() {
         });
 
         clearEventsCache();
+        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
+        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_sheets_api", target: isLeave ? "leaves" : "main", id: eventId });
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
@@ -624,6 +702,8 @@ async function startServer() {
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
         
         clearEventsCache();
+        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
+        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
       } else {
         return res.status(500).json({ 
@@ -736,6 +816,8 @@ async function startServer() {
         }
         
         clearEventsCache();
+        const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
+        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
         if (error.message && error.message.startsWith('NOT_FOUND:')) {
@@ -852,6 +934,8 @@ async function startServer() {
             },
           });
           clearEventsCache();
+          const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
+          sendLineNotification(notificationMsg);
           return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
         }
       } catch (error: any) {
@@ -870,6 +954,8 @@ async function startServer() {
         const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
         if (result.changes > 0) {
           clearEventsCache();
+          const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
+          sendLineNotification(notificationMsg);
           res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         } else {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
@@ -1228,8 +1314,10 @@ async function startServer() {
       return res.status(500).json({ error: `Apps Script 刪除失敗且無 Sheets API 備援: ${results.gas?.error}` });
     }
 
-    if (results.gas?.success || results.sheets?.success) {
+    if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
       clearEventsCache();
+      const notificationMsg = `🗑️ 家庭行事曆：活動刪除通知\n📌 活動：${eventDetails?.title || title}\n⏰ 時間：${eventDetails?.start_date || ''}`;
+      sendLineNotification(notificationMsg);
     }
 
     res.json({ success: true, results });
