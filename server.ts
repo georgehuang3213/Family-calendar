@@ -586,7 +586,8 @@ async function startServer() {
 
   async function getTodayWeather() {
     try {
-      const url = 'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=1';
+      // 台中市座標：緯度 24.1477, 經度 120.6736
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=24.1477&longitude=120.6736&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=1';
       const response = await axios.get(url, { timeout: 8000 });
       const daily = response.data.daily;
       const code = daily.weather_code[0];
