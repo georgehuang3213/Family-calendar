@@ -584,6 +584,52 @@ async function startServer() {
     });
   });
 
+  async function getTodayWeather() {
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=1';
+      const response = await axios.get(url, { timeout: 8000 });
+      const daily = response.data.daily;
+      const code = daily.weather_code[0];
+      const maxT = Math.round(daily.temperature_2m_max[0]);
+      const minT = Math.round(daily.temperature_2m_min[0]);
+      const pop = daily.precipitation_probability_max[0];
+
+      let weatherDesc = "未知";
+      let icon = "🌤️";
+      if (code === 0) { weatherDesc = "晴天"; icon = "☀️"; }
+      else if (code === 1 || code === 2) { weatherDesc = "多雲"; icon = "⛅"; }
+      else if (code === 3) { weatherDesc = "陰天"; icon = "☁️"; }
+      else if (code >= 45 && code <= 48) { weatherDesc = "起霧"; icon = "🌫️"; }
+      else if (code >= 51 && code <= 57) { weatherDesc = "毛毛雨"; icon = "🌧️"; }
+      else if (code >= 61 && code <= 67) { weatherDesc = "下雨"; icon = "☔"; }
+      else if (code >= 71 && code <= 77) { weatherDesc = "下雪"; icon = "❄️"; }
+      else if (code >= 80 && code <= 82) { weatherDesc = "陣雨"; icon = "🌦️"; }
+      else if (code >= 85 && code <= 86) { weatherDesc = "陣雪"; icon = "❄️"; }
+      else if (code >= 95 && code <= 99) { weatherDesc = "雷陣雨"; icon = "⛈️"; }
+
+      return `${icon} ${weatherDesc} (${minT}°C - ${maxT}°C) | 降雨機率 ${pop}%`;
+    } catch (e) {
+      console.error("Weather fetch error:", e);
+      return null;
+    }
+  }
+
+  async function getTodayHoliday(year: number, dateStrYYYYMMDD: string) {
+    try {
+      const response = await axios.get(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`, { timeout: 8000 });
+      const formattedDate = dateStrYYYYMMDD.replace(/-/g, '');
+      const dayData = response.data.find((d: any) => d.date === formattedDate);
+      
+      if (dayData && dayData.isHoliday && dayData.description && !dayData.description.includes("星期")) {
+        return dayData.description;
+      }
+      return null;
+    } catch (e) {
+      console.error("Holiday fetch error:", e);
+      return null;
+    }
+  }
+
   app.get("/api/cron/daily-push", async (req, res) => {
     try {
       await initializeSheet();
@@ -596,6 +642,11 @@ async function startServer() {
       const dd = String(today.getDate()).padStart(2, '0');
       const todayStr = `${yyyy}-${mm}-${dd}`;
 
+      const [weatherStr, holidayStr] = await Promise.all([
+        getTodayWeather(),
+        getTodayHoliday(yyyy, todayStr)
+      ]);
+
       // Filter events that happen today
       const todaysEvents = result.events.filter((e: any) => {
         // Handle single day events
@@ -607,20 +658,29 @@ async function startServer() {
         return false;
       });
 
-      if (todaysEvents.length === 0) {
-        console.log("📅 No events today. Skipping LINE push.");
-        return res.json({ success: true, message: "No events today" });
+      if (todaysEvents.length === 0 && !holidayStr) {
+        console.log("📅 No events and no holiday today. Skipping LINE push.");
+        return res.json({ success: true, message: "No events or holiday today" });
       }
 
       // Format the message
-      let message = `📅 【今日家庭行事曆】 ${todayStr}\n\n`;
-      todaysEvents.forEach((e: any, index: number) => {
-        message += `📌 ${index + 1}. ${e.title}\n`;
-        if (e.time) message += `⏰ 時間：${e.time}\n`;
-        if (e.member_name) message += `👤 成員：${e.member_name}\n`;
-        if (e.companions) message += `👥 同行：${e.companions}\n`;
-        message += `\n`;
-      });
+      let message = `📅 【今日家庭行事曆】 ${todayStr}\n`;
+      if (holidayStr) message += `🎈 節日：${holidayStr}\n`;
+      if (weatherStr) message += `⛅ 天氣：${weatherStr}\n`;
+      message += `\n`;
+
+      if (todaysEvents.length > 0) {
+        todaysEvents.forEach((e: any, index: number) => {
+          message += `📌 ${index + 1}. ${e.title}\n`;
+          if (e.time) message += `⏰ 時間：${e.time}\n`;
+          if (e.member_name) message += `👤 成員：${e.member_name}\n`;
+          if (e.companions) message += `👥 同行：${e.companions}\n`;
+          message += `\n`;
+        });
+      } else {
+        message += `📌 今日無特別排程活動\n\n`;
+      }
+      
       message += `祝大家有美好的一天！✨`;
 
       await sendLineNotification(message.trim());
