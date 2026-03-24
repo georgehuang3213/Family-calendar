@@ -238,12 +238,19 @@ const lineConfig = {
   channelSecret: process.env.LINE_CHANNEL_SECRET || '',
 };
 
-const lineClient = new Client(lineConfig);
+let lineClient: Client | null = null;
+try {
+  if (lineConfig.channelAccessToken && lineConfig.channelSecret) {
+    lineClient = new Client(lineConfig);
+  }
+} catch (e: any) {
+  console.error("⚠️ Failed to initialize LINE client:", e.message);
+}
 
 // Helper to send LINE notification
 async function sendLineNotification(message: string) {
   const groupId = process.env.LINE_GROUP_ID;
-  if (!groupId || !lineConfig.channelAccessToken || lineConfig.channelAccessToken === "YOUR_CHANNEL_ACCESS_TOKEN") {
+  if (!lineClient || !groupId || !lineConfig.channelAccessToken || lineConfig.channelAccessToken === "YOUR_CHANNEL_ACCESS_TOKEN") {
     console.log("⚠️ LINE notification skipped: Missing Group ID or Access Token");
     return;
   }
@@ -330,6 +337,11 @@ async function startServer() {
   // LINE Webhook (Handle both with and without trailing slash)
   // We add a try-catch block around the middleware to handle the case where
   // LINE's "Verify" button sends a dummy request that might fail signature validation
+  const safeLineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => {
+    console.warn("⚠️ LINE Webhook called but channelSecret is missing.");
+    res.status(400).send("LINE not configured");
+  };
+
   app.post(['/api/line/webhook', '/api/line/webhook/'], (req, res, next) => {
     // If it's a test request from LINE (often empty or invalid signature during "Verify")
     // We just return 200 OK to pass the verification
@@ -338,7 +350,7 @@ async function startServer() {
       return res.status(200).send("OK");
     }
     next();
-  }, middleware(lineConfig), (req, res) => {
+  }, safeLineMiddleware, (req, res) => {
     console.log("📩 Received LINE Webhook event");
     Promise.all(req.body.events.map(handleLineEvent))
       .then(() => res.json({ success: true }))
@@ -359,6 +371,10 @@ async function startServer() {
     if (event.type === 'join' && event.source.type === 'group') {
       const groupId = event.source.groupId;
       console.log("🤖 Bot joined group:", groupId);
+      if (!lineClient) {
+        console.warn("⚠️ Cannot reply to group join because lineClient is not initialized.");
+        return Promise.resolve(null);
+      }
       return lineClient.replyMessage(event.replyToken, {
         type: 'text',
         text: `大家好！本群組的 ID 是：\n${groupId}\n請將此 ID 填入系統設定中。`,
