@@ -584,6 +584,53 @@ async function startServer() {
     });
   });
 
+  app.get("/api/cron/daily-push", async (req, res) => {
+    try {
+      await initializeSheet();
+      const result = await fetchEventsInternal();
+      
+      // Get today's date in YYYY-MM-DD format (Taiwan time)
+      const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      // Filter events that happen today
+      const todaysEvents = result.events.filter((e: any) => {
+        // Handle single day events
+        if (e.start_date === todayStr && (!e.end_date || e.end_date === todayStr)) return true;
+        // Handle multi-day events
+        if (e.start_date && e.end_date) {
+          return todayStr >= e.start_date && todayStr <= e.end_date;
+        }
+        return false;
+      });
+
+      if (todaysEvents.length === 0) {
+        console.log("📅 No events today. Skipping LINE push.");
+        return res.json({ success: true, message: "No events today" });
+      }
+
+      // Format the message
+      let message = `📅 【今日家庭行事曆】 ${todayStr}\n\n`;
+      todaysEvents.forEach((e: any, index: number) => {
+        message += `📌 ${index + 1}. ${e.title}\n`;
+        if (e.time) message += `⏰ 時間：${e.time}\n`;
+        if (e.member_name) message += `👤 成員：${e.member_name}\n`;
+        if (e.companions) message += `👥 同行：${e.companions}\n`;
+        message += `\n`;
+      });
+      message += `祝大家有美好的一天！✨`;
+
+      await sendLineNotification(message.trim());
+      return res.json({ success: true, message: "Daily push sent", count: todaysEvents.length });
+    } catch (error: any) {
+      console.error("❌ Daily Push Error:", error.message);
+      return res.status(500).json({ error: "Failed to send daily push", details: error.message });
+    }
+  });
+
   app.get("/api/events", async (req, res) => {
     // Ensure sheet is initialized on first request
     await initializeSheet();
@@ -662,8 +709,6 @@ async function startServer() {
         }
         
         clearEventsCache();
-        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
-        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
       } catch (error: any) {
         console.error("Apps Script Save Error:", error.message);
@@ -718,8 +763,6 @@ async function startServer() {
         });
 
         clearEventsCache();
-        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
-        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_sheets_api", target: isLeave ? "leaves" : "main", id: eventId });
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
@@ -740,8 +783,6 @@ async function startServer() {
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
         
         clearEventsCache();
-        const notificationMsg = `📅 家庭行事曆：新活動通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 建立者：${member_name}`;
-        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
       } else {
         return res.status(500).json({ 
@@ -854,8 +895,6 @@ async function startServer() {
         }
         
         clearEventsCache();
-        const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
-        sendLineNotification(notificationMsg);
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
         if (error.message && error.message.startsWith('NOT_FOUND:')) {
@@ -972,8 +1011,6 @@ async function startServer() {
             },
           });
           clearEventsCache();
-          const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
-          sendLineNotification(notificationMsg);
           return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
         }
       } catch (error: any) {
@@ -992,8 +1029,6 @@ async function startServer() {
         const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
         if (result.changes > 0) {
           clearEventsCache();
-          const notificationMsg = `✏️ 家庭行事曆：活動修改通知\n📌 活動：${title}\n⏰ 時間：${start_date} ${time || ''}\n👤 修改者：${member_name}`;
-          sendLineNotification(notificationMsg);
           res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         } else {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
@@ -1354,8 +1389,6 @@ async function startServer() {
 
     if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
       clearEventsCache();
-      const notificationMsg = `🗑️ 家庭行事曆：活動刪除通知\n📌 活動：${eventDetails?.title || title}\n⏰ 時間：${eventDetails?.start_date || ''}`;
-      sendLineNotification(notificationMsg);
     }
 
     res.json({ success: true, results });
