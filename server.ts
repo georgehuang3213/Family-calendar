@@ -671,6 +671,39 @@ async function startServer() {
     }
   });
 
+  async function checkAndSendSameDayNotification(eventData: any, isNew: boolean = true) {
+    try {
+      const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      const { title, start_date, end_date, time, member_name, companions } = eventData;
+
+      let isToday = false;
+      if (start_date === todayStr && (!end_date || end_date === todayStr)) {
+        isToday = true;
+      } else if (start_date && end_date) {
+        if (todayStr >= start_date && todayStr <= end_date) {
+          isToday = true;
+        }
+      }
+
+      if (isToday) {
+        let message = isNew ? `🚨 【臨時新增】今日活動通知\n\n` : `🚨 【臨時修改】今日活動通知\n\n`;
+        message += `📌 活動：${title}\n`;
+        if (time) message += `⏰ 時間：${time}\n`;
+        if (member_name) message += `👤 成員：${member_name}\n`;
+        if (companions) message += `👥 同行：${companions}\n`;
+        
+        await sendLineNotification(message.trim());
+      }
+    } catch (err) {
+      console.error("Failed to send same-day notification:", err);
+    }
+  }
+
   app.post("/api/events", async (req, res) => {
     await initializeSheet();
     const eventData = req.body;
@@ -709,6 +742,7 @@ async function startServer() {
         }
         
         clearEventsCache();
+        checkAndSendSameDayNotification(eventData, true);
         return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
       } catch (error: any) {
         console.error("Apps Script Save Error:", error.message);
@@ -763,6 +797,7 @@ async function startServer() {
         });
 
         clearEventsCache();
+        checkAndSendSameDayNotification(eventData, true);
         return res.json({ success: true, source: "google_sheets_api", target: isLeave ? "leaves" : "main", id: eventId });
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
@@ -783,6 +818,7 @@ async function startServer() {
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
         
         clearEventsCache();
+        checkAndSendSameDayNotification(eventData, true);
         return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
       } else {
         return res.status(500).json({ 
@@ -895,6 +931,7 @@ async function startServer() {
         }
         
         clearEventsCache();
+        checkAndSendSameDayNotification(eventData, false);
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
         if (error.message && error.message.startsWith('NOT_FOUND:')) {
@@ -1011,6 +1048,7 @@ async function startServer() {
             },
           });
           clearEventsCache();
+          checkAndSendSameDayNotification(eventData, false);
           return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
         }
       } catch (error: any) {
@@ -1029,6 +1067,7 @@ async function startServer() {
         const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
         if (result.changes > 0) {
           clearEventsCache();
+          checkAndSendSameDayNotification(eventData, false);
           res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         } else {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
