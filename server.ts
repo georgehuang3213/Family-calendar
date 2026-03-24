@@ -676,6 +676,7 @@ async function startServer() {
           if (e.time) message += `⏰ 時間：${e.time}\n`;
           if (e.member_name) message += `👤 成員：${e.member_name}\n`;
           if (e.companions) message += `👥 同行：${e.companions}\n`;
+          if (e.description) message += `📝 備註：${e.description}\n`;
           message += `\n`;
         });
       } else {
@@ -740,7 +741,7 @@ async function startServer() {
       const dd = String(today.getDate()).padStart(2, '0');
       const todayStr = `${yyyy}-${mm}-${dd}`;
 
-      const { title, start_date, end_date, time, member_name, companions } = eventData;
+      const { title, start_date, end_date, time, member_name, companions, description } = eventData;
 
       let isToday = false;
       if (start_date === todayStr && (!end_date || end_date === todayStr)) {
@@ -766,6 +767,7 @@ async function startServer() {
         if (time) message += `⏰ 時間：${time}\n`;
         if (member_name) message += `👤 成員：${member_name}\n`;
         if (companions) message += `👥 同行：${companions}\n`;
+        if (description) message += `📝 備註：${description}\n`;
         
         await sendLineNotification(message.trim());
       }
