@@ -339,14 +339,15 @@ async function startServer() {
   // LINE's "Verify" button sends a dummy request that might fail signature validation
   const safeLineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => {
     console.warn("⚠️ LINE Webhook called but channelSecret is missing.");
-    res.status(400).send("LINE not configured");
+    // Always return 200 OK for LINE verification to pass, even if not fully configured yet
+    res.status(200).send("LINE not configured yet, but endpoint is active");
   };
 
   app.post(['/api/line/webhook', '/api/line/webhook/'], (req, res, next) => {
     // If it's a test request from LINE (often empty or invalid signature during "Verify")
     // We just return 200 OK to pass the verification
-    if (!req.headers['x-line-signature']) {
-      console.log("⚠️ Received LINE Webhook without signature. Likely a verification request.");
+    if (!req.headers['x-line-signature'] || req.body?.events?.length === 0 || (req.body?.events?.[0]?.replyToken === '00000000000000000000000000000000')) {
+      console.log("⚠️ Received LINE Webhook verification request. Returning 200 OK.");
       return res.status(200).send("OK");
     }
     next();
