@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Solar } from 'lunar-javascript';
 import { 
   format, 
   startOfMonth, 
@@ -479,6 +480,19 @@ export default function App() {
       console.error('Failed to fetch config status');
     }
   };
+
+  const getLunarDate = useCallback((date: Date) => {
+    try {
+      const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+      const lunar = solar.getLunar();
+      if (lunar.getDay() === 1) {
+        return `${lunar.getMonthInChinese()}月`;
+      }
+      return lunar.getDayInChinese();
+    } catch (e) {
+      return '';
+    }
+  }, []);
 
   const fetchEvents = async (showLoading = true) => {
     try {
@@ -1324,6 +1338,9 @@ export default function App() {
                         )}>
                           {format(day, 'd')}
                         </span>
+                        <span className="text-[9px] md:text-[10px] text-stone-400 dark:text-stone-500 font-medium">
+                          {getLunarDate(day)}
+                        </span>
                         {weather && (
                           <div className="flex items-center gap-0.5 group relative">
                             {WEATHER_ICONS[weather.code]}
@@ -1674,7 +1691,7 @@ export default function App() {
                 return (
                 <div key={date}>
                   <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10 flex items-center justify-between">
-                    <span>{format(safeParseISO(date), 'MM月dd日 EEEE')}</span>
+                    <span>{format(safeParseISO(date), 'MM月dd日 EEEE')} <span className="text-stone-400 dark:text-stone-600 font-medium ml-2">農曆 {getLunarDate(safeParseISO(date))}</span></span>
                     {weather && (
                       <div className="flex items-center gap-2 text-[10px] normal-case tracking-normal font-bold">
                         <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
@@ -1838,7 +1855,12 @@ export default function App() {
           <div className="bg-white dark:bg-stone-900 rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300 max-h-[90vh] flex flex-col border-t md:border border-stone-100 dark:border-stone-800">
             <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-stone-50/50 dark:bg-stone-800/50 shrink-0">
               <div className="flex flex-col">
-                <h2 className="text-base md:text-lg font-black tracking-tight text-stone-900 dark:text-stone-100">{editingEventId ? '編輯活動' : '新增活動'}</h2>
+                <h2 className="text-base md:text-lg font-black tracking-tight text-stone-900 dark:text-stone-100">
+                  {editingEventId ? '編輯活動' : '新增活動'}
+                  <span className="text-stone-400 dark:text-stone-500 font-medium text-xs ml-2">
+                    農曆 {getLunarDate(safeParseISO(newEvent.start_date))}
+                  </span>
+                </h2>
                 {editingEventId && (
                   <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium mt-0.5">
                     原始日期: {newEvent.start_date}
@@ -2011,6 +2033,9 @@ export default function App() {
                 <h3 className="text-base font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
                   {format(selectedDay, 'MM月dd日')} 活動
+                  <span className="text-stone-400 dark:text-stone-500 font-medium text-xs ml-1">
+                    農曆 {getLunarDate(selectedDay)}
+                  </span>
                 </h3>
                 {weatherData?.[format(selectedDay, 'yyyy-MM-dd')] && (
                   <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
