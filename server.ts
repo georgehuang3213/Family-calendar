@@ -368,18 +368,39 @@ async function startServer() {
   app.use(express.json());
 
   async function handleLineEvent(event: WebhookEvent) {
+    if (!lineClient) {
+      console.warn("⚠️ Cannot reply because lineClient is not initialized.");
+      return Promise.resolve(null);
+    }
+
+    // 當機器人被加入群組時
     if (event.type === 'join' && event.source.type === 'group') {
       const groupId = event.source.groupId;
       console.log("🤖 Bot joined group:", groupId);
-      if (!lineClient) {
-        console.warn("⚠️ Cannot reply to group join because lineClient is not initialized.");
-        return Promise.resolve(null);
-      }
       return lineClient.replyMessage(event.replyToken, {
         type: 'text',
         text: `大家好！本群組的 ID 是：\n${groupId}\n請將此 ID 填入系統設定中。`,
       });
     }
+
+    // 當有人傳送文字訊息時 (方便隨時查詢 ID)
+    if (event.type === 'message' && event.message.type === 'text') {
+      const text = event.message.text.trim().toLowerCase();
+      if (text === 'id' || text === '取得id') {
+        if (event.source.type === 'group') {
+          return lineClient.replyMessage(event.replyToken, {
+            type: 'text',
+            text: `本群組的 ID 是：\n${event.source.groupId}`,
+          });
+        } else if (event.source.type === 'user') {
+          return lineClient.replyMessage(event.replyToken, {
+            type: 'text',
+            text: `您的個人 ID 是：\n${event.source.userId}\n\n(提示：若要推播到群組，請將我邀請至群組後，在群組內輸入 id)`,
+          });
+        }
+      }
+    }
+
     return Promise.resolve(null);
   }
 
