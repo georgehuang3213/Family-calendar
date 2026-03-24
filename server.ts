@@ -1255,6 +1255,12 @@ async function startServer() {
       }
     }
 
+    // Use req.body as fallback for eventDetails
+    if (!eventDetails && req.body && Object.keys(req.body).length > 0) {
+      eventDetails = req.body;
+      console.log("Using req.body for eventDetails fallback:", eventDetails);
+    }
+
     // 2. Attempt deletion
     if (!eventDetails && !APPS_SCRIPT_URL && !SPREADSHEET_ID) {
       return res.status(404).json({ error: `刪除失敗: 找不到活動 (ID: ${id})` });
@@ -1307,12 +1313,8 @@ async function startServer() {
           sheet: targetSheet
         };
         
-        const isUUID = typeof id === 'string' && id.match(/^[0-9a-f]{8}-[0-9a-f]{4}/i);
-        
-        if (id && id !== 'undefined' && !isUUID) {
+        if (id && id !== 'undefined') {
           deletePayload.id = id;
-        } else if (isUUID) {
-          console.log(`ID is a UUID (${id}), skipping sending ID to Apps Script to prevent accidental row deletion.`);
         }
 
         console.log("Sending delete request to Apps Script:", deletePayload);

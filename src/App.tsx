@@ -650,13 +650,14 @@ export default function App() {
       // 使用 DELETE 方法並將 title 放入 query string
       const res = await fetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(eventToDeleteObj.title)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(eventToDeleteObj)
       });
       
-      if (!res.ok) throw new Error('刪除請求失敗');
-      
       const result = await res.json();
-      if (!result.success) throw new Error(result.error || '刪除失敗');
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || '刪除請求失敗');
+      }
       
       fetchEvents(false);
     } catch (err: any) {
