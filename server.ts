@@ -752,7 +752,16 @@ async function startServer() {
       }
 
       if (isToday) {
-        let message = isNew ? `🚨 【臨時新增】今日活動通知\n\n` : `🚨 【臨時修改】今日活動通知\n\n`;
+        const [weatherStr, holidayStr] = await Promise.all([
+          getTodayWeather(),
+          getTodayHoliday(yyyy, todayStr)
+        ]);
+
+        let message = isNew ? `🚨 【臨時新增】今日活動通知\n` : `🚨 【臨時修改】今日活動通知\n`;
+        if (holidayStr) message += `🎈 節日：${holidayStr}\n`;
+        if (weatherStr) message += `⛅ 天氣：${weatherStr}\n`;
+        message += `\n`;
+        
         message += `📌 活動：${title}\n`;
         if (time) message += `⏰ 時間：${time}\n`;
         if (member_name) message += `👤 成員：${member_name}\n`;
