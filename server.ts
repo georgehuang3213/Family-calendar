@@ -649,12 +649,23 @@ async function startServer() {
       ]);
 
       // Filter events that happen today
+      const todayTime = new Date(yyyy, today.getMonth(), today.getDate()).getTime();
+      
+      const parseDateStr = (dStr: string) => {
+        if (!dStr) return 0;
+        const parts = dStr.trim().split(/[-/]/);
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
+        }
+        return new Date(dStr).getTime();
+      };
+
       const todaysEvents = result.events.filter((e: any) => {
-        // Handle single day events
-        if (e.start_date === todayStr && (!e.end_date || e.end_date === todayStr)) return true;
-        // Handle multi-day events
-        if (e.start_date && e.end_date) {
-          return todayStr >= e.start_date && todayStr <= e.end_date;
+        const startTime = parseDateStr(e.start_date);
+        const endTime = e.end_date ? parseDateStr(e.end_date) : startTime;
+        
+        if (startTime > 0 && endTime > 0) {
+          return todayTime >= startTime && todayTime <= endTime;
         }
         return false;
       });
@@ -743,11 +754,23 @@ async function startServer() {
 
       const { title, start_date, end_date, time, member_name, companions, description } = eventData;
 
+      const todayTime = new Date(yyyy, today.getMonth(), today.getDate()).getTime();
+      
+      const parseDateStr = (dStr: string) => {
+        if (!dStr) return 0;
+        const parts = dStr.trim().split(/[-/]/);
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
+        }
+        return new Date(dStr).getTime();
+      };
+
       let isToday = false;
-      if (start_date === todayStr && (!end_date || end_date === todayStr)) {
-        isToday = true;
-      } else if (start_date && end_date) {
-        if (todayStr >= start_date && todayStr <= end_date) {
+      const startTime = parseDateStr(start_date);
+      const endTime = end_date ? parseDateStr(end_date) : startTime;
+      
+      if (startTime > 0 && endTime > 0) {
+        if (todayTime >= startTime && todayTime <= endTime) {
           isToday = true;
         }
       }
