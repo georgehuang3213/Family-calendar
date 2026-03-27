@@ -653,11 +653,26 @@ async function startServer() {
       
       const parseDateStr = (dStr: string) => {
         if (!dStr) return 0;
-        const parts = dStr.trim().split(/[-/]/);
-        if (parts.length === 3) {
+        const s = dStr.trim();
+        if (s.includes('T')) {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const taipeiStr = d.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+            const taipeiDate = new Date(taipeiStr);
+            return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
+          }
+        }
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 4) {
           return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
         }
-        return new Date(dStr).getTime();
+        const fallback = new Date(s);
+        if (!isNaN(fallback.getTime())) {
+           const taipeiStr = fallback.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+           const taipeiDate = new Date(taipeiStr);
+           return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
+        }
+        return 0;
       };
 
       const todaysEvents = result.events.filter((e: any) => {
@@ -758,11 +773,26 @@ async function startServer() {
       
       const parseDateStr = (dStr: string) => {
         if (!dStr) return 0;
-        const parts = dStr.trim().split(/[-/]/);
-        if (parts.length === 3) {
+        const s = dStr.trim();
+        if (s.includes('T')) {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const taipeiStr = d.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+            const taipeiDate = new Date(taipeiStr);
+            return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
+          }
+        }
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 4) {
           return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
         }
-        return new Date(dStr).getTime();
+        const fallback = new Date(s);
+        if (!isNaN(fallback.getTime())) {
+           const taipeiStr = fallback.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+           const taipeiDate = new Date(taipeiStr);
+           return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
+        }
+        return 0;
       };
 
       let isToday = false;
