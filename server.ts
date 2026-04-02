@@ -13,10 +13,8 @@ let db_local: any = null;
 // Caching logic
 let eventsCache: { data: any, timestamp: number } | null = null;
 let taiwanCalendarCache: Record<string, { data: any, timestamp: number }> = {};
-const CACHE_TTL = 15 * 1000; // 15 seconds (fresh)
-const STALE_TTL = 60 * 1000; // 60 seconds (stale but usable)
+const CACHE_TTL = 30 * 1000; // 30 seconds
 const CALENDAR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-let isFetchingInBackground = false;
 
 function clearEventsCache() {
   console.log("🧹 Clearing events cache");
@@ -741,27 +739,13 @@ async function startServer() {
     const forceRefresh = req.query.refresh === 'true';
     const now = Date.now();
     
-    // Check cache (Stale-While-Revalidate)
+    // Check cache
     if (!forceRefresh && eventsCache) {
       const age = now - eventsCache.timestamp;
       
       if (age < CACHE_TTL) {
-        console.log("🚀 Serving events from cache (Fresh)");
+        console.log("🚀 Serving events from cache");
         return res.json({ ...eventsCache.data, cached: true });
-      } else if (age < STALE_TTL) {
-        console.log("🚀 Serving events from cache (Stale) - Triggering background refresh");
-        // Return stale data immediately
-        res.json({ ...eventsCache.data, cached: true, stale: true });
-        
-        // Trigger background refresh
-        if (!isFetchingInBackground) {
-          isFetchingInBackground = true;
-          fetchEventsInternal().finally(() => {
-            isFetchingInBackground = false;
-            console.log("✅ Background refresh complete");
-          });
-        }
-        return;
       }
     }
     

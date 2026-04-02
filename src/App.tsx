@@ -398,12 +398,23 @@ export default function App() {
     fetchWeather();
     fetchHolidays(2026);
 
-    // Poll for new events every 15 seconds to keep sync fast
+    // Poll for new events every 3 minutes to keep sync without overloading
     const intervalId = setInterval(() => {
       fetchEvents(false);
-    }, 15000);
+    }, 180000);
 
-    return () => clearInterval(intervalId);
+    // Fetch immediately when user switches back to this tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchEvents(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const fetchWeather = async () => {
