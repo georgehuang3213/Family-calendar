@@ -397,6 +397,13 @@ export default function App() {
     fetchConfigStatus();
     fetchWeather();
     fetchHolidays(2026);
+
+    // Poll for new events every 15 seconds to keep sync fast
+    const intervalId = setInterval(() => {
+      fetchEvents(false);
+    }, 15000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const fetchWeather = async () => {

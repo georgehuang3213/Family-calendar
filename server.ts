@@ -13,8 +13,8 @@ let db_local: any = null;
 // Caching logic
 let eventsCache: { data: any, timestamp: number } | null = null;
 let taiwanCalendarCache: Record<string, { data: any, timestamp: number }> = {};
-const CACHE_TTL = 60 * 1000; // 60 seconds (fresh)
-const STALE_TTL = 5 * 60 * 1000; // 5 minutes (stale but usable)
+const CACHE_TTL = 15 * 1000; // 15 seconds (fresh)
+const STALE_TTL = 60 * 1000; // 60 seconds (stale but usable)
 const CALENDAR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 let isFetchingInBackground = false;
 
