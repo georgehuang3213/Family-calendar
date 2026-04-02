@@ -200,6 +200,12 @@ export default function App() {
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
   const pendingQuickLeaves = useRef<Set<string>>(new Set());
+  const [isElderlyMode, setIsElderlyMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('elderlyMode') === 'true';
+    }
+    return false;
+  });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark';
@@ -220,6 +226,14 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    if (isElderlyMode) {
+      localStorage.setItem('elderlyMode', 'true');
+    } else {
+      localStorage.setItem('elderlyMode', 'false');
+    }
+  }, [isElderlyMode]);
 
   const handleDragStart = (e: React.DragEvent, eventId: string | number) => {
     e.dataTransfer.setData('eventId', String(eventId));
@@ -773,6 +787,21 @@ export default function App() {
     }
   };
 
+  const isEventOnDate = (event: any, date: Date) => {
+    try {
+      const start = startOfDay(safeParseISO(event.start_date));
+      const end = startOfDay(safeParseISO(event.end_date));
+      const current = startOfDay(date);
+      
+      const intervalStart = start < end ? start : end;
+      const intervalEnd = start < end ? end : start;
+      
+      return isWithinInterval(current, { start: intervalStart, end: intervalEnd });
+    } catch (err) {
+      return false;
+    }
+  };
+
   const formatTimeDisplay = (timeStr: string | undefined | null) => {
     if (!timeStr) return '';
     const s = String(timeStr);
@@ -967,6 +996,19 @@ export default function App() {
           >
             今天
           </button>
+
+          <button 
+            onClick={() => setIsElderlyMode(!isElderlyMode)}
+            className={cn(
+              "flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm border",
+              isElderlyMode 
+                ? "bg-amber-500 text-white border-amber-600" 
+                : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+            )}
+            title="長輩友善模式"
+          >
+            長輩模式
+          </button>
           
           <button 
             onClick={() => {
@@ -991,6 +1033,120 @@ export default function App() {
       </header>
 
       <main className="p-4 md:p-6 max-w-7xl mx-auto">
+        {isElderlyMode ? (
+          <div className="space-y-8 pb-12">
+            {/* 今天 */}
+            <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-indigo-100 dark:border-indigo-900">
+              <h2 className="text-4xl font-black text-indigo-700 dark:text-indigo-400 mb-6 border-b-4 border-indigo-100 dark:border-indigo-900 pb-4">
+                今天 ({format(new Date(), 'MM/dd')})
+              </h2>
+              <div className="space-y-4">
+                {events.filter(e => isEventOnDate(e, new Date())).length === 0 ? (
+                  <p className="text-3xl text-stone-500 font-bold py-8 text-center">今天沒有活動</p>
+                ) : (
+                  events.filter(e => isEventOnDate(e, new Date())).map(event => (
+                    <div key={event.id} className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <span className="text-2xl font-black px-4 py-2 rounded-xl text-white" style={{ backgroundColor: event.color || '#4F46E5' }}>
+                            {event.member_name}
+                          </span>
+                          {event.time && (
+                            <span className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                              {formatTimeDisplay(event.time)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => handleEditClick(event)}
+                            className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
+                          >
+                            <Edit size={28} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteEvent(event)}
+                            className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
+                          >
+                            <Trash2 size={28} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
+                      {event.description && <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 明天 */}
+            <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-emerald-100 dark:border-emerald-900">
+              <h2 className="text-4xl font-black text-emerald-700 dark:text-emerald-400 mb-6 border-b-4 border-emerald-100 dark:border-emerald-900 pb-4">
+                明天 ({format(addDays(new Date(), 1), 'MM/dd')})
+              </h2>
+              <div className="space-y-4">
+                {events.filter(e => isEventOnDate(e, addDays(new Date(), 1))).length === 0 ? (
+                  <p className="text-3xl text-stone-500 font-bold py-8 text-center">明天沒有活動</p>
+                ) : (
+                  events.filter(e => isEventOnDate(e, addDays(new Date(), 1))).map(event => (
+                    <div key={event.id} className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <span className="text-2xl font-black px-4 py-2 rounded-xl text-white" style={{ backgroundColor: event.color || '#4F46E5' }}>
+                            {event.member_name}
+                          </span>
+                          {event.time && (
+                            <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                              {formatTimeDisplay(event.time)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => handleEditClick(event)}
+                            className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
+                          >
+                            <Edit size={28} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteEvent(event)}
+                            className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
+                          >
+                            <Trash2 size={28} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
+                      {event.description && <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => {
+                setEditingEventId(null);
+                setNewEvent({
+                  title: '',
+                  description: '',
+                  start_date: format(new Date(), 'yyyy-MM-dd'),
+                  end_date: format(new Date(), 'yyyy-MM-dd'),
+                  time: '',
+                  member_name: FAMILY_MEMBERS[0],
+                  color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+                });
+                setIsModalOpen(true);
+              }}
+              className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black text-3xl flex items-center justify-center gap-4 shadow-xl active:scale-95 transition-transform"
+            >
+              <Plus size={40} />
+              新增活動
+            </button>
+          </div>
+        ) : (
+          <>
         {/* Today's Weather Overview (Mobile Only) */}
         {currentWeather && (
           <div className="md:hidden bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden">
@@ -1770,10 +1926,13 @@ export default function App() {
             )}
           </div>
         )}
+          </>
+        )}
       </main>
 
       {/* Bottom Navigation Bar for Mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      {!isElderlyMode && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <button 
           onClick={() => setViewMode('calendar')}
           className={cn(
@@ -1815,6 +1974,7 @@ export default function App() {
           <span className="text-[10px] font-black uppercase tracking-widest">列表</span>
         </button>
       </nav>
+      )}
 
       {/* Toast Notification */}
       {toast && (
@@ -1830,23 +1990,23 @@ export default function App() {
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-[280px] overflow-hidden animate-in zoom-in duration-200 border border-stone-100 dark:border-stone-800">
-            <div className="p-5 text-center">
-              <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-3 text-rose-600 dark:text-rose-400">
-                <Trash2 size={24} />
+          <div className={cn("bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full overflow-hidden animate-in zoom-in duration-200 border border-stone-100 dark:border-stone-800", isElderlyMode ? "max-w-md" : "max-w-[280px]")}>
+            <div className={cn("text-center", isElderlyMode ? "p-8" : "p-5")}>
+              <div className={cn("bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-3 text-rose-600 dark:text-rose-400", isElderlyMode ? "w-20 h-20" : "w-12 h-12")}>
+                <Trash2 size={isElderlyMode ? 40 : 24} />
               </div>
-              <h3 className="text-base font-black text-stone-900 dark:text-stone-100 mb-1">確定要刪除嗎？</h3>
-              <p className="text-stone-500 dark:text-stone-400 text-[11px] font-medium mb-5">此操作將無法復原。</p>
+              <h3 className={cn("font-black text-stone-900 dark:text-stone-100 mb-1", isElderlyMode ? "text-3xl" : "text-base")}>確定要刪除嗎？</h3>
+              <p className={cn("text-stone-500 dark:text-stone-400 font-medium mb-5", isElderlyMode ? "text-xl" : "text-[11px]")}>此操作將無法復原。</p>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 px-3 py-2 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all"
+                  className={cn("flex-1 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-black uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[10px]")}
                 >
                   取消
                 </button>
                 <button 
                   onClick={executeDelete}
-                  className="flex-1 px-3 py-2 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none"
+                  className={cn("flex-1 bg-rose-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[10px]")}
                 >
                   刪除
                 </button>
@@ -1862,14 +2022,14 @@ export default function App() {
           <div className="bg-white dark:bg-stone-900 rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300 max-h-[90vh] flex flex-col border-t md:border border-stone-100 dark:border-stone-800">
             <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-stone-50/50 dark:bg-stone-800/50 shrink-0">
               <div className="flex flex-col">
-                <h2 className="text-base md:text-lg font-black tracking-tight text-stone-900 dark:text-stone-100">
+                <h2 className={cn("font-black tracking-tight text-stone-900 dark:text-stone-100", isElderlyMode ? "text-3xl" : "text-base md:text-lg")}>
                   {editingEventId ? '編輯活動' : '新增活動'}
-                  <span className="text-stone-400 dark:text-stone-500 font-medium text-xs ml-2">
+                  <span className={cn("text-stone-400 dark:text-stone-500 font-medium ml-2", isElderlyMode ? "text-xl" : "text-xs")}>
                     農曆 {getLunarDate(safeParseISO(newEvent.start_date))}
                   </span>
                 </h2>
                 {editingEventId && (
-                  <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium mt-0.5">
+                  <span className={cn("text-stone-400 dark:text-stone-500 font-medium mt-0.5", isElderlyMode ? "text-lg" : "text-[10px]")}>
                     原始日期: {newEvent.start_date}
                   </span>
                 )}
@@ -1879,46 +2039,46 @@ export default function App() {
                   setIsModalOpen(false);
                   setEditingEventId(null);
                 }} 
-                className="w-8 h-8 flex items-center justify-center bg-stone-200 dark:bg-stone-800 rounded-full text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-stone-700 transition-colors"
+                className={cn("flex items-center justify-center bg-stone-200 dark:bg-stone-800 rounded-full text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-stone-700 transition-colors", isElderlyMode ? "w-12 h-12" : "w-8 h-8")}
               >
-                <X size={18} />
+                <X size={isElderlyMode ? 28 : 18} />
               </button>
             </div>
             
             <div className="overflow-y-auto p-5">
-              <form onSubmit={handleAddEvent} className="space-y-4">
+              <form onSubmit={handleAddEvent} className={cn("space-y-4", isElderlyMode && "space-y-6")}>
                 <div>
-                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">活動名稱</label>
+                  <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>活動名稱</label>
                   <input 
                     required
                     type="text" 
                     value={newEvent.title || ''}
                     onChange={e => setNewEvent({...newEvent, title: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                     placeholder="例如：家族聚餐"
                   />
                 </div>
 
                 <div className={cn("grid gap-3", !['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') ? "grid-cols-2" : "grid-cols-1")}>
                   <div>
-                    <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">日期</label>
+                    <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>日期</label>
                     <input 
                       required
                       type="date" 
                       value={newEvent.start_date || ''}
                       onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                      className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                     />
                   </div>
                   {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
                     <div>
-                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">結束日期</label>
+                      <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>結束日期</label>
                       <input 
                         required
                         type="date" 
                         value={newEvent.end_date || ''}
                         onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                   )}
@@ -1927,28 +2087,28 @@ export default function App() {
                 {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">開始時間 (選填)</label>
+                      <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>開始時間 (選填)</label>
                       <input 
                         type="time" 
                         value={newEvent.start_time || ''}
                         onChange={e => setNewEvent({...newEvent, start_time: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">結束時間 (選填)</label>
+                      <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>結束時間 (選填)</label>
                       <input 
                         type="time" 
                         value={newEvent.end_time || ''}
                         onChange={e => setNewEvent({...newEvent, end_time: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-medium text-stone-900 dark:text-stone-100"
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">參與成員</label>
+                  <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>參與成員</label>
                   <div className="flex flex-wrap gap-2">
                     {FAMILY_MEMBERS.map(member => (
                       <button
@@ -1956,13 +2116,14 @@ export default function App() {
                         type="button"
                         onClick={() => setNewEvent({...newEvent, member_name: member, color: MEMBER_COLORS[member] || '#4F46E5'})}
                         className={cn(
-                          "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
+                          "rounded-full font-bold transition-all flex items-center gap-1.5 border",
+                          isElderlyMode ? "px-6 py-3 text-xl" : "px-3 py-1.5 text-xs",
                           newEvent.member_name === member
                             ? "bg-stone-800 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-800 dark:border-stone-100 shadow-sm"
                             : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                         )}
                       >
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                        <div className={cn("rounded-full", isElderlyMode ? "w-4 h-4" : "w-2 h-2")} style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
                         {member}
                       </button>
                     ))}
@@ -1970,7 +2131,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">隨行人員 (選填)</label>
+                  <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>隨行人員 (選填)</label>
                   <div className="flex flex-wrap gap-2">
                     {FAMILY_MEMBERS.map(member => {
                       const isSelected = (newEvent.companions ? newEvent.companions.split(',') : []).includes(member);
@@ -1987,13 +2148,14 @@ export default function App() {
                             }
                           }}
                           className={cn(
-                            "px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border",
+                            "rounded-full font-bold transition-all flex items-center gap-1.5 border",
+                            isElderlyMode ? "px-6 py-3 text-xl" : "px-3 py-1.5 text-xs",
                             isSelected
                               ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 shadow-sm"
                               : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                           )}
                         >
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                          <div className={cn("rounded-full", isElderlyMode ? "w-4 h-4" : "w-2 h-2")} style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
                           {member}
                         </button>
                       );
@@ -2002,11 +2164,11 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5">備註 (選填)</label>
+                  <label className={cn("block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5", isElderlyMode ? "text-xl" : "text-xs")}>備註 (選填)</label>
                   <textarea 
                     value={newEvent.description || ''}
                     onChange={e => setNewEvent({...newEvent, description: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all min-h-[80px] text-sm font-medium resize-none text-stone-900 dark:text-stone-100"
+                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl min-h-[120px]" : "px-4 py-2.5 text-sm min-h-[80px]")}
                     placeholder="活動細節..."
                   />
                 </div>
@@ -2014,7 +2176,7 @@ export default function App() {
                 <div className="pt-2 pb-6 md:pb-2">
                   <button 
                     type="submit"
-                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200 dark:shadow-none"
+                    className={cn("w-full bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200 dark:shadow-none", isElderlyMode ? "py-6 text-3xl" : "py-3.5 text-sm")}
                   >
                     {editingEventId ? '更新活動' : '儲存活動'}
                   </button>
