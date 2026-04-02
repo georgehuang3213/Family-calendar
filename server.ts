@@ -24,113 +24,128 @@ function clearEventsCache() {
 }
 
 // Reusable fetch logic
+let fetchEventsPromise: Promise<any> | null = null;
+
 async function fetchEventsInternal() {
-  let events: any[] = [];
-  const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
-  let source = "unknown";
-  let appsScriptWarning: string | undefined = undefined;
-
-  // Priority 1: Google Apps Script
-  if (APPS_SCRIPT_URL) {
-    try {
-      console.log("📡 Fetching events from Apps Script...");
-      const response = await axios.get(APPS_SCRIPT_URL, { timeout: 30000 });
-      
-      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-        throw new Error("Apps Script returned HTML instead of JSON.");
-      }
-
-      if (Array.isArray(response.data)) {
-        events = response.data;
-        source = "google_apps_script";
-      } else if (response.data && Array.isArray(response.data.events)) {
-        events = response.data.events;
-        source = "google_apps_script";
-      }
-    } catch (e: any) {
-      console.error("❌ Apps Script Fetch Error:", e.message);
-      appsScriptWarning = e.message;
-    }
+  if (fetchEventsPromise) {
+    console.log("⏳ Joining existing fetch request to prevent stampede...");
+    return fetchEventsPromise;
   }
 
-  // Priority 2: Direct Sheets API
-  if (events.length === 0 && sheetInitStatus.success) {
+  fetchEventsPromise = (async () => {
     try {
-      console.log("📡 Fetching events from Direct Sheets API...");
-      const sheets = await getSheets();
-      if (sheets) {
-        const mainResponse = await sheets.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: RANGE,
-        });
-        
-        let leavesRows: any[][] = [];
+      let events: any[] = [];
+      const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
+      let source = "unknown";
+      let appsScriptWarning: string | undefined = undefined;
+
+      // Priority 1: Google Apps Script
+      if (APPS_SCRIPT_URL) {
         try {
-          const leavesResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: LEAVES_RANGE,
-          });
-          leavesRows = leavesResponse.data.values || [];
-        } catch (e) {}
+          console.log("📡 Fetching events from Apps Script...");
+          const response = await axios.get(APPS_SCRIPT_URL, { timeout: 30000 });
+          
+          if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+            throw new Error("Apps Script returned HTML instead of JSON.");
+          }
 
-        const mainRows = mainResponse.data.values || [];
-
-        const processRows = (rows: any[][], sheetName: string) => {
-          if (!rows || rows.length <= 1) return [];
-          const rawHeaders = rows[0];
-          return rows.slice(1).map((row, index) => {
-            const event: any = { id: `${sheetName}-${index + 1}` };
-            rawHeaders.forEach((rawHeader, i) => {
-              const normalized = String(rawHeader).toLowerCase().trim().replace(/[_\s]/g, '');
-              const value = row[i] || "";
-              if (normalized === 'id') event.id = value;
-              else if (normalized === 'title') event.title = value;
-              else if (normalized === 'description') event.description = value;
-              else if (normalized === 'startdate') event.start_date = value;
-              else if (normalized === 'enddate') event.end_date = value;
-              else if (normalized === 'time') event.time = value;
-              else if (normalized === 'membername') event.member_name = value;
-              else if (normalized === 'color') event.color = value;
-              event[rawHeader] = value;
-            });
-            if (!event.title) event.title = "無標題";
-            if (!event.start_date) event.start_date = new Date().toISOString().split('T')[0];
-            if (!event.end_date) event.end_date = event.start_date;
-            if (!event.member_name) event.member_name = "全家";
-            if (!event.color) event.color = "#4F46E5";
-            return event;
-          });
-        };
-
-        events = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
-        source = "google_sheets_api";
+          if (Array.isArray(response.data)) {
+            events = response.data;
+            source = "google_apps_script";
+          } else if (response.data && Array.isArray(response.data.events)) {
+            events = response.data.events;
+            source = "google_apps_script";
+          }
+        } catch (e: any) {
+          console.error("❌ Apps Script Fetch Error:", e.message);
+          appsScriptWarning = e.message;
+        }
       }
-    } catch (e: any) {
-      console.error("❌ Sheets API Fetch Error:", e.message);
+
+      // Priority 2: Direct Sheets API
+      if (events.length === 0 && sheetInitStatus.success) {
+        try {
+          console.log("📡 Fetching events from Direct Sheets API...");
+          const sheets = await getSheets();
+          if (sheets) {
+            const mainResponse = await sheets.spreadsheets.values.get({
+              spreadsheetId: SPREADSHEET_ID,
+              range: RANGE,
+            });
+            
+            let leavesRows: any[][] = [];
+            try {
+              const leavesResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: LEAVES_RANGE,
+              });
+              leavesRows = leavesResponse.data.values || [];
+            } catch (e) {}
+
+            const mainRows = mainResponse.data.values || [];
+
+            const processRows = (rows: any[][], sheetName: string) => {
+              if (!rows || rows.length <= 1) return [];
+              const rawHeaders = rows[0];
+              return rows.slice(1).map((row, index) => {
+                const event: any = { id: `${sheetName}-${index + 1}` };
+                rawHeaders.forEach((rawHeader, i) => {
+                  const normalized = String(rawHeader).toLowerCase().trim().replace(/[_\s]/g, '');
+                  const value = row[i] || "";
+                  if (normalized === 'id') event.id = value;
+                  else if (normalized === 'title') event.title = value;
+                  else if (normalized === 'description') event.description = value;
+                  else if (normalized === 'startdate') event.start_date = value;
+                  else if (normalized === 'enddate') event.end_date = value;
+                  else if (normalized === 'time') event.time = value;
+                  else if (normalized === 'membername') event.member_name = value;
+                  else if (normalized === 'color') event.color = value;
+                  event[rawHeader] = value;
+                });
+                if (!event.title) event.title = "無標題";
+                if (!event.start_date) event.start_date = new Date().toISOString().split('T')[0];
+                if (!event.end_date) event.end_date = event.start_date;
+                if (!event.member_name) event.member_name = "全家";
+                if (!event.color) event.color = "#4F46E5";
+                return event;
+              });
+            };
+
+            events = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
+            source = "google_sheets_api";
+          }
+        } catch (e: any) {
+          console.error("❌ Sheets API Fetch Error:", e.message);
+        }
+      }
+
+      // Priority 3: SQLite
+      if (events.length === 0 && db_local) {
+        try {
+          console.log("📡 Fetching from local SQLite fallback...");
+          const rows = db_local.prepare("SELECT * FROM events").all();
+          events = rows.map((row: any) => ({ ...row, id: String(row.id) }));
+          source = "sqlite_fallback";
+        } catch (e: any) {
+          console.error("❌ SQLite Fetch Error:", e.message);
+        }
+      }
+
+      const result = {
+        events,
+        source,
+        timestamp: new Date().toISOString(),
+        warning: appsScriptWarning
+      };
+
+      eventsCache = { data: result, timestamp: Date.now() };
+      return result;
+    } finally {
+      fetchEventsPromise = null;
     }
-  }
+  })();
 
-  // Priority 3: SQLite
-  if (events.length === 0 && db_local) {
-    try {
-      console.log("📡 Fetching from local SQLite fallback...");
-      const rows = db_local.prepare("SELECT * FROM events").all();
-      events = rows.map((row: any) => ({ ...row, id: String(row.id) }));
-      source = "sqlite_fallback";
-    } catch (e: any) {
-      console.error("❌ SQLite Fetch Error:", e.message);
-    }
-  }
-
-  const result = {
-    events,
-    source,
-    timestamp: new Date().toISOString(),
-    warning: appsScriptWarning
-  };
-
-  eventsCache = { data: result, timestamp: Date.now() };
-  return result;
+  return fetchEventsPromise;
 }
 
 // Google Sheets setup (Lazy Initialization)
