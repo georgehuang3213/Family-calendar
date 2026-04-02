@@ -1,0 +1,17 @@
+{
+  "name": "家庭共用日曆",
+  "short_name": "家庭日曆",
+  "description": "專為長輩與家庭設計的共用行事曆",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ef4444",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
