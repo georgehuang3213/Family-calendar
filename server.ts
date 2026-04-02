@@ -34,7 +34,7 @@ async function fetchEventsInternal() {
   if (APPS_SCRIPT_URL) {
     try {
       console.log("📡 Fetching events from Apps Script...");
-      const response = await axios.get(APPS_SCRIPT_URL, { timeout: 15000 });
+      const response = await axios.get(APPS_SCRIPT_URL, { timeout: 30000 });
       
       if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
         throw new Error("Apps Script returned HTML instead of JSON.");
