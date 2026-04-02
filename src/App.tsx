@@ -1037,9 +1037,26 @@ export default function App() {
           <div className="space-y-8 pb-12">
             {/* 今天 */}
             <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-indigo-100 dark:border-indigo-900">
-              <h2 className="text-4xl font-black text-indigo-700 dark:text-indigo-400 mb-6 border-b-4 border-indigo-100 dark:border-indigo-900 pb-4">
-                今天 ({format(new Date(), 'MM/dd')})
-              </h2>
+              <div className="mb-6 border-b-4 border-indigo-100 dark:border-indigo-900 pb-4">
+                <div className="flex flex-wrap items-center gap-4 mb-3">
+                  <h2 className="text-4xl font-black text-indigo-700 dark:text-indigo-400">
+                    今天 ({format(new Date(), 'MM/dd')})
+                  </h2>
+                  {allHolidays[format(new Date(), 'yyyy-MM-dd')] && (
+                    <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
+                      {allHolidays[format(new Date(), 'yyyy-MM-dd')]}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
+                  <span>農曆 {getLunarDate(new Date())}</span>
+                  {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
+                    <span className="flex items-center gap-2">
+                      | {WEATHER_ICONS[weatherData[format(new Date(), 'yyyy-MM-dd')].code]} {WEATHER_DESCRIPTIONS[weatherData[format(new Date(), 'yyyy-MM-dd')].code]} {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}°~{Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="space-y-4">
                 {events.filter(e => isEventOnDate(e, new Date())).length === 0 ? (
                   <p className="text-3xl text-stone-500 font-bold py-8 text-center">今天沒有活動</p>
@@ -1082,9 +1099,26 @@ export default function App() {
 
             {/* 明天 */}
             <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-emerald-100 dark:border-emerald-900">
-              <h2 className="text-4xl font-black text-emerald-700 dark:text-emerald-400 mb-6 border-b-4 border-emerald-100 dark:border-emerald-900 pb-4">
-                明天 ({format(addDays(new Date(), 1), 'MM/dd')})
-              </h2>
+              <div className="mb-6 border-b-4 border-emerald-100 dark:border-emerald-900 pb-4">
+                <div className="flex flex-wrap items-center gap-4 mb-3">
+                  <h2 className="text-4xl font-black text-emerald-700 dark:text-emerald-400">
+                    明天 ({format(addDays(new Date(), 1), 'MM/dd')})
+                  </h2>
+                  {allHolidays[format(addDays(new Date(), 1), 'yyyy-MM-dd')] && (
+                    <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
+                      {allHolidays[format(addDays(new Date(), 1), 'yyyy-MM-dd')]}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
+                  <span>農曆 {getLunarDate(addDays(new Date(), 1))}</span>
+                  {weatherData?.[format(addDays(new Date(), 1), 'yyyy-MM-dd')] && (
+                    <span className="flex items-center gap-2">
+                      | {WEATHER_ICONS[weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].code]} {WEATHER_DESCRIPTIONS[weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].code]} {Math.round(weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].min)}°~{Math.round(weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].max)}°
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="space-y-4">
                 {events.filter(e => isEventOnDate(e, addDays(new Date(), 1))).length === 0 ? (
                   <p className="text-3xl text-stone-500 font-bold py-8 text-center">明天沒有活動</p>
