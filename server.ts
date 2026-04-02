@@ -16,6 +16,31 @@ let taiwanCalendarCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_TTL = 30 * 1000; // 30 seconds
 const CALENDAR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
+// Async Queue for Write Operations to prevent conflicts
+let writeQueue: Promise<any> = Promise.resolve();
+
+function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const currentQueue = writeQueue;
+  let resolvePromise: (value: T | PromiseLike<T>) => void;
+  let rejectPromise: (reason?: any) => void;
+
+  const resultPromise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  writeQueue = currentQueue.finally(async () => {
+    try {
+      const result = await operation();
+      resolvePromise(result);
+    } catch (error) {
+      rejectPromise(error);
+    }
+  });
+
+  return resultPromise;
+}
+
 function clearEventsCache() {
   console.log("🧹 Clearing events cache");
   eventsCache = null;
@@ -829,8 +854,9 @@ async function startServer() {
   }
 
   app.post("/api/events", async (req, res) => {
-    await initializeSheet();
-    const eventData = req.body;
+    enqueueWrite(async () => {
+      await initializeSheet();
+      const eventData = req.body;
     const { title, description, start_date, end_date, time, member_name, color, companions } = eventData;
     const eventId = uuidv4(); 
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
@@ -957,11 +983,18 @@ async function startServer() {
         details: error.message 
       });
     }
+    }).catch(err => {
+      console.error("Queue Error (POST):", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "伺服器內部錯誤", details: err.message });
+      }
+    });
   });
 
   app.put("/api/events/:id", async (req, res) => {
-    await initializeSheet();
-    const { id } = req.params;
+    enqueueWrite(async () => {
+      await initializeSheet();
+      const { id } = req.params;
     const eventData = req.body;
     const { title, description, start_date, end_date, time, member_name, color, companions, original_title } = eventData;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
@@ -1208,11 +1241,18 @@ async function startServer() {
       console.error("SQLite Update Error:", error.message);
       res.status(500).json({ error: "Failed to update event locally", warning: appsScriptUpdateWarning });
     }
+    }).catch(err => {
+      console.error("Queue Error (PUT):", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "伺服器內部錯誤", details: err.message });
+      }
+    });
   });
 
   app.delete("/api/events/:id", async (req, res) => {
-    await initializeSheet();
-    const { id } = req.params;
+    enqueueWrite(async () => {
+      await initializeSheet();
+      const { id } = req.params;
     const { title } = req.query;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
     console.log(`[DELETE] Request received for id: ${id}, title: ${title}`);
@@ -1557,6 +1597,12 @@ async function startServer() {
     }
 
     res.json({ success: true, results });
+    }).catch(err => {
+      console.error("Queue Error (DELETE):", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "伺服器內部錯誤", details: err.message });
+      }
+    });
   });
 
   // Global error handler
