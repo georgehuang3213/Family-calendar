@@ -422,9 +422,11 @@ async function startServer() {
       });
     }
 
-    // 當有人傳送文字訊息時 (方便隨時查詢 ID)
+    // 當有人傳送文字訊息時
     if (event.type === 'message' && event.message.type === 'text') {
       const text = event.message.text.trim().toLowerCase();
+      
+      // 取得 ID 指令
       if (text === 'id' || text === '取得id') {
         if (event.source.type === 'group') {
           return lineClient.replyMessage(event.replyToken, {
@@ -436,6 +438,109 @@ async function startServer() {
             type: 'text',
             text: `您的個人 ID 是：\n${event.source.userId}\n\n(提示：若要推播到群組，請將我邀請至群組後，在群組內輸入 id)`,
           });
+        }
+      }
+
+      // 幫助指令
+      if (text === '幫助' || text === 'help' || text === '指令') {
+        return lineClient.replyMessage(event.replyToken, {
+          type: 'text',
+          text: `🤖 智慧家庭日曆指令列表：\n\n` +
+                `📅 查詢行程：\n` +
+                `• 「今天行程」\n` +
+                `• 「明天行程」\n` +
+                `• 「這週行程」\n` +
+                `• 「下週行程」\n\n` +
+                `🏖️ 查詢排休：\n` +
+                `• 「誰排休」 (查詢這週排休)\n\n` +
+                `🆔 系統資訊：\n` +
+                `• 「id」 (取得群組或個人 ID)`,
+        });
+      }
+
+      // 行程查詢邏輯
+      const queryPatterns = [
+        { pattern: /今天行程/, days: 0, label: '今天' },
+        { pattern: /明天行程/, days: 1, label: '明天' },
+        { pattern: /這週行程/, days: 7, label: '這週' },
+        { pattern: /下週行程/, days: 14, label: '下週', offset: 7 },
+        { pattern: /誰排休/, days: 7, label: '這週排休', filterLeave: true }
+      ];
+
+      for (const q of queryPatterns) {
+        if (q.pattern.test(text)) {
+          try {
+            const result = await fetchEventsInternal();
+            const allEvents = result.events || [];
+            
+            // 取得台灣時間
+            const now = new Date();
+            const taiwanNow = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
+            const today = new Date(taiwanNow.getFullYear(), taiwanNow.getMonth(), taiwanNow.getDate());
+            
+            let startDate = new Date(today);
+            let endDate = new Date(today);
+
+            if (q.label === '今天') {
+              endDate.setDate(today.getDate() + 1);
+            } else if (q.label === '明天') {
+              startDate.setDate(today.getDate() + 1);
+              endDate.setDate(today.getDate() + 2);
+            } else if (q.label === '這週' || q.label === '這週排休') {
+              // 這週從今天開始算 7 天
+              endDate.setDate(today.getDate() + 7);
+            } else if (q.label === '下週') {
+              startDate.setDate(today.getDate() + 7);
+              endDate.setDate(today.getDate() + 14);
+            }
+
+            const filteredEvents = allEvents.filter((e: any) => {
+              const eStart = new Date(e.start_date);
+              const eEnd = new Date(e.end_date || e.start_date);
+              // 只要行程有重疊到該區間就列出
+              const overlap = eStart < endDate && eEnd >= startDate;
+              
+              if (q.filterLeave) {
+                return overlap && (e.title.includes('休') || e.title.includes('假'));
+              }
+              return overlap;
+            });
+
+            if (filteredEvents.length === 0) {
+              return lineClient.replyMessage(event.replyToken, {
+                type: 'text',
+                text: `📍 ${q.label}沒有任何行程規劃。`,
+              });
+            }
+
+            // 依照日期排序
+            filteredEvents.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
+
+            let responseText = `📅 ${q.label}行程摘要：\n`;
+            let currentDate = '';
+
+            filteredEvents.forEach((e: any) => {
+              if (e.start_date !== currentDate) {
+                currentDate = e.start_date;
+                const dateObj = new Date(currentDate);
+                const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                responseText += `\n📌 ${dateStr}：\n`;
+              }
+              const timeStr = e.time ? `[${e.time}] ` : '';
+              responseText += `• ${timeStr}${e.member_name}：${e.title}\n`;
+            });
+
+            return lineClient.replyMessage(event.replyToken, {
+              type: 'text',
+              text: responseText.trim(),
+            });
+          } catch (err) {
+            console.error("LINE Query Error:", err);
+            return lineClient.replyMessage(event.replyToken, {
+              type: 'text',
+              text: "抱歉，查詢行程時發生錯誤，請稍後再試。",
+            });
+          }
         }
       }
     }

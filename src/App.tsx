@@ -91,17 +91,17 @@ const HOLIDAYS_2026: Record<string, string> = {
 };
 
 const MEMBER_COLORS: Record<string, string> = {
-  '全家': '#111827', // Dark Gray / Black
-  '江雪卿': '#E11D48', // Rose
-  '黃喬裕': '#2563EB', // Blue
-  '陳愉婷': '#16A34A', // Green
-  '黃宣綾': '#D97706', // Amber
-  '黃宣綸': '#9333EA', // Purple
-  '黃郁婷': '#0891B2', // Cyan
-  '郭力維': '#BE185D', // Pink/Magenta
-  '黃郁慈': '#EA580C', // Orange
-  '郭品佑': '#65A30D', // Lime/Olive
-  '郭品彤': '#0D9488', // Teal
+  '全家': '#111827', // 黑色 (不變)
+  '江雪卿': '#E11D48', // 玫瑰紅 (不變)
+  '黃喬裕': '#2563EB', // 鮮藍色
+  '陳愉婷': '#059669', // 翠綠色
+  '黃宣綾': '#D97706', // 琥珀色
+  '黃宣綸': '#7C3AED', // 亮紫色
+  '黃郁婷': '#DB2777', // 桃粉色
+  '郭力維': '#4B5563', // 石板灰
+  '黃郁慈': '#EA580C', // 亮橘色
+  '郭品佑': '#84CC16', // 萊姆綠
+  '郭品彤': '#06B6D4', // 亮青色
 };
 
 const WEATHER_ICONS: Record<number, React.ReactNode> = {
@@ -192,6 +192,7 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState<Date>(new Date());
   const [editingEventId, setEditingEventId] = useState<string | number | null>(null);
   const [isQuickLeaveEnabled, setIsQuickLeaveEnabled] = useState(false);
+  const [isQuickWorkEnabled, setIsQuickWorkEnabled] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<string | number | null>(null);
@@ -199,7 +200,9 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
+  const [quickSelectType, setQuickSelectType] = useState<'leave' | 'work'>('leave');
   const pendingQuickLeaves = useRef<Set<string>>(new Set());
+  const pendingQuickWorks = useRef<Set<string>>(new Set());
   const [isElderlyMode, setIsElderlyMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('elderlyMode') === 'true';
@@ -375,6 +378,85 @@ export default function App() {
       setEvents(prev => prev.filter(e => String(e.id) !== tempId));
     } finally {
       pendingQuickLeaves.current.delete(lockKey);
+    }
+  };
+
+  const handleQuickWork = async (member: string) => {
+    const dateStr = format(selectedDay, 'yyyy-MM-dd');
+    const lockKey = `${member}-${dateStr}`;
+    
+    // 1. 防止重複點擊 (鎖定)
+    if (pendingQuickWorks.current.has(lockKey)) return;
+    
+    // 2. 檢查是否已經有該成員在該天的上班紀錄
+    const alreadyHasWork = events.some(e => 
+      e.member_name === member && 
+      e.start_date === dateStr && 
+      e.title === '上班'
+    );
+    
+    if (alreadyHasWork) {
+      showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有上班紀錄了`, 'error');
+      return;
+    }
+
+    pendingQuickWorks.current.add(lockKey);
+    
+    const eventColor = MEMBER_COLORS[member] || '#4F46E5';
+    const workEvent = {
+      title: '上班',
+      description: '',
+      start_date: dateStr,
+      end_date: dateStr,
+      time: '',
+      member_name: member,
+      color: eventColor,
+      action: 'create',
+    };
+
+    const tempId = `temp-work-${Date.now()}`;
+    const optimisticEvent = { ...workEvent, id: tempId, syncing: true };
+    
+    setEvents(prev => [...prev, optimisticEvent]);
+    showToast(`正在新增 ${member} 上班...`);
+    setIsDayModalOpen(false);
+    
+    if (filterMember !== '全部' && filterMember !== member) {
+      setFilterMember(member);
+    }
+
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workEvent)
+      });
+      
+      const contentType = res.headers.get("content-type");
+      let result;
+      if (contentType && contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`伺服器回應異常`);
+      }
+
+      if (!res.ok) throw new Error(result.error || '快速新增失敗');
+      
+      showToast(`已成功新增 ${member} 上班`);
+      
+      if (result.id) {
+        setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
+      }
+      
+      // 稍微延遲重新抓取，確保後端同步完成
+      setTimeout(() => fetchEvents(false), 500);
+    } catch (err: any) {
+      console.error("Quick Work Error:", err);
+      showToast(`新增失敗: ${err.message}`, 'error');
+      setEvents(prev => prev.filter(e => String(e.id) !== tempId));
+    } finally {
+      pendingQuickWorks.current.delete(lockKey);
     }
   };
 
@@ -1053,129 +1135,92 @@ export default function App() {
       <main className="p-4 md:p-6 max-w-7xl mx-auto">
         {isElderlyMode ? (
           <div className="space-y-8 pb-12">
-            {/* 今天 */}
-            <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-indigo-100 dark:border-indigo-900">
-              <div className="mb-6 border-b-4 border-indigo-100 dark:border-indigo-900 pb-4">
-                <div className="flex flex-wrap items-center gap-4 mb-3">
-                  <h2 className="text-4xl font-black text-indigo-700 dark:text-indigo-400">
-                    今天 ({format(new Date(), 'MM/dd')})
-                  </h2>
-                  {allHolidays[format(new Date(), 'yyyy-MM-dd')] && (
-                    <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
-                      {allHolidays[format(new Date(), 'yyyy-MM-dd')]}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
-                  <span>農曆 {getLunarDate(new Date())}</span>
-                  {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
-                    <span className="flex items-center gap-2">
-                      | {WEATHER_ICONS[weatherData[format(new Date(), 'yyyy-MM-dd')].code]} {WEATHER_DESCRIPTIONS[weatherData[format(new Date(), 'yyyy-MM-dd')].code]} {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}°~{Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-4">
-                {events.filter(e => isEventOnDate(e, new Date())).length === 0 ? (
-                  <p className="text-3xl text-stone-500 font-bold py-8 text-center">今天沒有活動</p>
-                ) : (
-                  events.filter(e => isEventOnDate(e, new Date())).map(event => (
-                    <div key={event.id} className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                          <span className="text-2xl font-black px-4 py-2 rounded-xl text-white" style={{ backgroundColor: event.color || '#4F46E5' }}>
-                            {event.member_name}
-                          </span>
-                          {event.time && (
-                            <span className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                              {formatTimeDisplay(event.time)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button 
-                            onClick={() => handleEditClick(event)}
-                            className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
-                          >
-                            <Edit size={28} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteEvent(event)}
-                            className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
-                          >
-                            <Trash2 size={28} />
-                          </button>
-                        </div>
-                      </div>
-                      <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
-                      {event.description && <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            {/* 近七天行程 */}
+            {Array.from({ length: 7 }).map((_, index) => {
+              const day = addDays(new Date(), index);
+              const dateKey = format(day, 'yyyy-MM-dd');
+              const isToday = index === 0;
+              const isTomorrow = index === 1;
+              
+              let dayLabel = format(day, 'MM/dd');
+              if (isToday) dayLabel = `今天 (${dayLabel})`;
+              else if (isTomorrow) dayLabel = `明天 (${dayLabel})`;
+              else {
+                const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+                dayLabel = `週${weekDays[day.getDay()]} (${dayLabel})`;
+              }
 
-            {/* 明天 */}
-            <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4 border-emerald-100 dark:border-emerald-900">
-              <div className="mb-6 border-b-4 border-emerald-100 dark:border-emerald-900 pb-4">
-                <div className="flex flex-wrap items-center gap-4 mb-3">
-                  <h2 className="text-4xl font-black text-emerald-700 dark:text-emerald-400">
-                    明天 ({format(addDays(new Date(), 1), 'MM/dd')})
-                  </h2>
-                  {allHolidays[format(addDays(new Date(), 1), 'yyyy-MM-dd')] && (
-                    <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
-                      {allHolidays[format(addDays(new Date(), 1), 'yyyy-MM-dd')]}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
-                  <span>農曆 {getLunarDate(addDays(new Date(), 1))}</span>
-                  {weatherData?.[format(addDays(new Date(), 1), 'yyyy-MM-dd')] && (
-                    <span className="flex items-center gap-2">
-                      | {WEATHER_ICONS[weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].code]} {WEATHER_DESCRIPTIONS[weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].code]} {Math.round(weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].min)}°~{Math.round(weatherData[format(addDays(new Date(), 1), 'yyyy-MM-dd')].max)}°
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-4">
-                {events.filter(e => isEventOnDate(e, addDays(new Date(), 1))).length === 0 ? (
-                  <p className="text-3xl text-stone-500 font-bold py-8 text-center">明天沒有活動</p>
-                ) : (
-                  events.filter(e => isEventOnDate(e, addDays(new Date(), 1))).map(event => (
-                    <div key={event.id} className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                          <span className="text-2xl font-black px-4 py-2 rounded-xl text-white" style={{ backgroundColor: event.color || '#4F46E5' }}>
-                            {event.member_name}
-                          </span>
-                          {event.time && (
-                            <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                              {formatTimeDisplay(event.time)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button 
-                            onClick={() => handleEditClick(event)}
-                            className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
-                          >
-                            <Edit size={28} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteEvent(event)}
-                            className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
-                          >
-                            <Trash2 size={28} />
-                          </button>
-                        </div>
-                      </div>
-                      <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
-                      {event.description && <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>}
+              const dayTheme = isToday 
+                ? { border: 'border-indigo-100 dark:border-indigo-900', text: 'text-indigo-700 dark:text-indigo-400', accent: 'text-indigo-600 dark:text-indigo-400' }
+                : isTomorrow 
+                  ? { border: 'border-emerald-100 dark:border-emerald-900', text: 'text-emerald-700 dark:text-emerald-400', accent: 'text-emerald-600 dark:text-emerald-400' }
+                  : { border: 'border-stone-100 dark:border-stone-800', text: 'text-stone-700 dark:text-stone-300', accent: 'text-stone-600 dark:text-stone-400' };
+
+              const dayEvents = events.filter(e => isEventOnDate(e, day));
+
+              return (
+                <div key={dateKey} className={cn("bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4", dayTheme.border)}>
+                  <div className={cn("mb-6 border-b-4 pb-4", dayTheme.border)}>
+                    <div className="flex flex-wrap items-center gap-4 mb-3">
+                      <h2 className={cn("text-4xl font-black", dayTheme.text)}>
+                        {dayLabel}
+                      </h2>
+                      {allHolidays[dateKey] && (
+                        <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
+                          {allHolidays[dateKey]}
+                        </span>
+                      )}
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
+                    <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
+                      <span>農曆 {getLunarDate(day)}</span>
+                      {weatherData?.[dateKey] && (
+                        <span className="flex items-center gap-2">
+                          | {WEATHER_ICONS[weatherData[dateKey].code]} {WEATHER_DESCRIPTIONS[weatherData[dateKey].code]} {Math.round(weatherData[dateKey].min)}°~{Math.round(weatherData[dateKey].max)}°
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {dayEvents.length === 0 ? (
+                      <p className="text-3xl text-stone-500 font-bold py-8 text-center">這天沒有活動</p>
+                    ) : (
+                      dayEvents.map(event => (
+                        <div key={event.id} className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                              <span className="text-2xl font-black px-4 py-2 rounded-xl text-white" style={{ backgroundColor: event.color || '#4F46E5' }}>
+                                {event.member_name}
+                              </span>
+                              {event.time && (
+                                <span className={cn("text-3xl font-bold", dayTheme.accent)}>
+                                  {formatTimeDisplay(event.time)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => handleEditClick(event)}
+                                className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
+                              >
+                                <Edit size={28} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteEvent(event)}
+                                className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
+                              >
+                                <Trash2 size={28} />
+                              </button>
+                            </div>
+                          </div>
+                          <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
+                          {event.description && <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             
             <button 
               onClick={() => {
@@ -1280,7 +1325,10 @@ export default function App() {
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
               {/* 一鍵排休開關 */}
               <button
-                onClick={() => setIsQuickLeaveEnabled(!isQuickLeaveEnabled)}
+                onClick={() => {
+                  setIsQuickLeaveEnabled(!isQuickLeaveEnabled);
+                  if (!isQuickLeaveEnabled) setIsQuickWorkEnabled(false);
+                }}
                 className={cn(
                   "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
                   isQuickLeaveEnabled 
@@ -1292,28 +1340,55 @@ export default function App() {
                 一鍵排休
               </button>
 
+              {/* 一鍵上班開關 */}
+              <button
+                onClick={() => {
+                  setIsQuickWorkEnabled(!isQuickWorkEnabled);
+                  if (!isQuickWorkEnabled) setIsQuickLeaveEnabled(false);
+                }}
+                className={cn(
+                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
+                  isQuickWorkEnabled 
+                    ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 shadow-sm"
+                    : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+                )}
+              >
+                <Zap size={12} className={isQuickWorkEnabled ? "text-indigo-500" : "text-stone-400"} />
+                一鍵上班
+              </button>
+
               <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
 
-              {['全部', ...FAMILY_MEMBERS].map(member => (
-                <button
-                  key={member}
-                  onClick={() => setFilterMember(member)}
+              {/* 成員篩選下拉選單 */}
+              <div className="relative flex-shrink-0">
+                <select
+                  value={filterMember}
+                  onChange={(e) => setFilterMember(e.target.value)}
                   className={cn(
-                    "flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5",
-                    filterMember === member 
-                      ? "bg-stone-800 dark:bg-stone-100 border-stone-800 dark:border-stone-100 text-white dark:text-stone-900 shadow-md" 
-                      : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600"
+                    "appearance-none pl-4 pr-10 py-1.5 rounded-full text-xs font-bold transition-all border bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600 outline-none cursor-pointer shadow-sm",
+                    filterMember !== '全部' && "border-stone-800 dark:border-stone-100 ring-1 ring-stone-800 dark:ring-stone-100"
                   )}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '12px',
+                  }}
                 >
-                  {member !== '全部' && (
-                    <div 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} 
-                    />
-                  )}
-                  {member}
-                </button>
-              ))}
+                  <option value="全部">全部成員</option>
+                  {FAMILY_MEMBERS.map(member => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </select>
+                {filterMember !== '全部' && (
+                  <div 
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full pointer-events-none" 
+                    style={{ backgroundColor: MEMBER_COLORS[filterMember] || '#4F46E5' }} 
+                  />
+                )}
+              </div>
             </div>
           </div>
 
@@ -1529,6 +1604,16 @@ export default function App() {
                           handleQuickLeave(filterMember);
                         } else {
                           // 如果是全部成員，開啟快速選擇視窗
+                          setQuickSelectType('leave');
+                          setIsQuickSelectOpen(true);
+                        }
+                      } else if (isQuickWorkEnabled) {
+                        if (filterMember !== '全部') {
+                          // 如果已選擇特定成員，直接上班
+                          handleQuickWork(filterMember);
+                        } else {
+                          // 如果是全部成員，開啟快速選擇視窗
+                          setQuickSelectType('work');
                           setIsQuickSelectOpen(true);
                         }
                       } else {
@@ -1719,7 +1804,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Quick Select Modal for Quick Leave */}
+        {/* Quick Select Modal for Quick Leave/Work */}
         {isQuickSelectOpen && (
           <div 
             className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4"
@@ -1731,9 +1816,9 @@ export default function App() {
             >
               <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Zap size={18} className="text-amber-500" />
+                  <Zap size={18} className={quickSelectType === 'leave' ? "text-amber-500" : "text-indigo-500"} />
                   <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest">
-                    快速排休 ({format(selectedDay, 'MM/dd')})
+                    快速{quickSelectType === 'leave' ? '排休' : '上班'} ({format(selectedDay, 'MM/dd')})
                   </h3>
                 </div>
                 <button 
@@ -1744,13 +1829,19 @@ export default function App() {
                 </button>
               </div>
               <div className="p-5">
-                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">選擇要排休的成員：</p>
+                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">
+                  選擇要{quickSelectType === 'leave' ? '排休' : '上班'}的成員：
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   {FAMILY_MEMBERS.map(member => (
                     <button
                       key={member}
                       onClick={() => {
-                        handleQuickLeave(member);
+                        if (quickSelectType === 'leave') {
+                          handleQuickLeave(member);
+                        } else {
+                          handleQuickWork(member);
+                        }
                         setIsQuickSelectOpen(false);
                       }}
                       className="px-4 py-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98]"
