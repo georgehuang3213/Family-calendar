@@ -487,7 +487,6 @@ async function startServer() {
               startDate.setDate(today.getDate() + 1);
               endDate.setDate(today.getDate() + 2);
             } else if (q.label === '這週' || q.label === '這週排休') {
-              // 這週從今天開始算 7 天
               endDate.setDate(today.getDate() + 7);
             } else if (q.label === '下週') {
               startDate.setDate(today.getDate() + 7);
@@ -495,8 +494,11 @@ async function startServer() {
             }
 
             const filteredEvents = allEvents.filter((e: any) => {
-              const eStart = new Date(e.start_date);
-              const eEnd = new Date(e.end_date || e.start_date);
+              // 處理行程日期，確保以台灣日期為準進行比較
+              // e.start_date 格式為 YYYY-MM-DD
+              const eStart = new Date(e.start_date + 'T00:00:00+08:00');
+              const eEnd = new Date((e.end_date || e.start_date) + 'T23:59:59+08:00');
+              
               // 只要行程有重疊到該區間就列出
               const overlap = eStart < endDate && eEnd >= startDate;
               
@@ -522,8 +524,9 @@ async function startServer() {
             filteredEvents.forEach((e: any) => {
               if (e.start_date !== currentDate) {
                 currentDate = e.start_date;
-                const dateObj = new Date(currentDate);
-                const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                // 解析日期字串，避免 JS Date 預設轉為 UTC 導致日期跳掉
+                const [y, m, d] = currentDate.split('-').map(Number);
+                const dateStr = `${m}/${d}`;
                 responseText += `\n📌 ${dateStr}：\n`;
               }
               const timeStr = e.time ? `[${e.time}] ` : '';
