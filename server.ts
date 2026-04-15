@@ -473,34 +473,46 @@ async function startServer() {
             const result = await fetchEventsInternal();
             const allEvents = result.events || [];
             
-            // 取得台灣時間
+            // 取得台灣時間的 YYYY-MM-DD 字串
             const now = new Date();
             const taiwanNow = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
-            const today = new Date(taiwanNow.getFullYear(), taiwanNow.getMonth(), taiwanNow.getDate());
-            
-            let startDate = new Date(today);
-            let endDate = new Date(today);
+            const formatDate = (date: Date) => {
+              const y = date.getFullYear();
+              const m = String(date.getMonth() + 1).padStart(2, '0');
+              const d = String(date.getDate()).padStart(2, '0');
+              return `${y}-${m}-${d}`;
+            };
+
+            const todayStr = formatDate(taiwanNow);
+            let startStr = todayStr;
+            let endStr = todayStr;
 
             if (q.label === '今天') {
-              endDate.setDate(today.getDate() + 1);
+              // startStr = todayStr, endStr = todayStr
             } else if (q.label === '明天') {
-              startDate.setDate(today.getDate() + 1);
-              endDate.setDate(today.getDate() + 2);
+              const tomorrow = new Date(taiwanNow);
+              tomorrow.setDate(taiwanNow.getDate() + 1);
+              startStr = formatDate(tomorrow);
+              endStr = startStr;
             } else if (q.label === '這週' || q.label === '這週排休') {
-              endDate.setDate(today.getDate() + 7);
+              const nextWeek = new Date(taiwanNow);
+              nextWeek.setDate(taiwanNow.getDate() + 6); // 包含今天共 7 天
+              endStr = formatDate(nextWeek);
             } else if (q.label === '下週') {
-              startDate.setDate(today.getDate() + 7);
-              endDate.setDate(today.getDate() + 14);
+              const nextMonday = new Date(taiwanNow);
+              nextMonday.setDate(taiwanNow.getDate() + 7);
+              const nextSunday = new Date(nextMonday);
+              nextSunday.setDate(nextMonday.getDate() + 6);
+              startStr = formatDate(nextMonday);
+              endStr = formatDate(nextSunday);
             }
 
             const filteredEvents = allEvents.filter((e: any) => {
-              // 處理行程日期，確保以台灣日期為準進行比較
-              // e.start_date 格式為 YYYY-MM-DD
-              const eStart = new Date(e.start_date + 'T00:00:00+08:00');
-              const eEnd = new Date((e.end_date || e.start_date) + 'T23:59:59+08:00');
+              const eStart = e.start_date;
+              const eEnd = e.end_date || e.start_date;
               
-              // 只要行程有重疊到該區間就列出
-              const overlap = eStart < endDate && eEnd >= startDate;
+              // 字串比較：行程的結束日期 >= 查詢的開始日期 且 行程的開始日期 <= 查詢的結束日期
+              const overlap = eEnd >= startStr && eStart <= endStr;
               
               if (q.filterLeave) {
                 return overlap && (e.title.includes('休') || e.title.includes('假'));
@@ -524,10 +536,8 @@ async function startServer() {
             filteredEvents.forEach((e: any) => {
               if (e.start_date !== currentDate) {
                 currentDate = e.start_date;
-                // 解析日期字串，避免 JS Date 預設轉為 UTC 導致日期跳掉
                 const [y, m, d] = currentDate.split('-').map(Number);
-                const dateStr = `${m}/${d}`;
-                responseText += `\n📌 ${dateStr}：\n`;
+                responseText += `\n📌 ${m}/${d}：\n`;
               }
               const timeStr = e.time ? `[${e.time}] ` : '';
               responseText += `• ${timeStr}${e.member_name}：${e.title}\n`;
