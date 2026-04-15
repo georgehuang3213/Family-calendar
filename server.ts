@@ -536,7 +536,9 @@ async function startServer() {
             filteredEvents.forEach((e: any) => {
               if (e.start_date !== currentDate) {
                 currentDate = e.start_date;
-                const [y, m, d] = currentDate.split('-').map(Number);
+                // 處理可能包含時間的 ISO 字串 (例如 2026-04-15T00:00:00.000Z) 或純日期字串 (2026-04-15)
+                const datePart = currentDate.split('T')[0];
+                const [y, m, d] = datePart.split('-').map(Number);
                 responseText += `\n📌 ${m}/${d}：\n`;
               }
               const timeStr = e.time ? `[${e.time}] ` : '';
