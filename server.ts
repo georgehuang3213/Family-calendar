@@ -483,6 +483,26 @@ async function startServer() {
               return `${y}-${m}-${d}`;
             };
 
+            const getTaiwanDateString = (dStr: string) => {
+              if (!dStr) return '';
+              const s = dStr.trim();
+              if (s.includes('T')) {
+                const d = new Date(s);
+                if (!isNaN(d.getTime())) {
+                  return formatDate(new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" })));
+                }
+              }
+              const parts = s.split(/[-/]/);
+              if (parts.length === 3 && parts[0].length === 4) {
+                return `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+              }
+              const fallback = new Date(s);
+              if (!isNaN(fallback.getTime())) {
+                 return formatDate(new Date(fallback.toLocaleString("en-US", { timeZone: "Asia/Taipei" })));
+              }
+              return s.split('T')[0];
+            };
+
             const todayStr = formatDate(taiwanNow);
             let startStr = todayStr;
             let endStr = todayStr;
@@ -507,9 +527,15 @@ async function startServer() {
               endStr = formatDate(nextSunday);
             }
 
-            const filteredEvents = allEvents.filter((e: any) => {
-              const eStart = e.start_date;
-              const eEnd = e.end_date || e.start_date;
+            const normalizedEvents = allEvents.map((e: any) => ({
+              ...e,
+              tw_start_date: getTaiwanDateString(e.start_date),
+              tw_end_date: getTaiwanDateString(e.end_date || e.start_date)
+            }));
+
+            const filteredEvents = normalizedEvents.filter((e: any) => {
+              const eStart = e.tw_start_date;
+              const eEnd = e.tw_end_date;
               
               // 字串比較：行程的結束日期 >= 查詢的開始日期 且 行程的開始日期 <= 查詢的結束日期
               const overlap = eEnd >= startStr && eStart <= endStr;
@@ -528,17 +554,15 @@ async function startServer() {
             }
 
             // 依照日期排序
-            filteredEvents.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
+            filteredEvents.sort((a: any, b: any) => a.tw_start_date.localeCompare(b.tw_start_date));
 
             let responseText = `📅 ${q.label}行程摘要：\n`;
             let currentDate = '';
 
             filteredEvents.forEach((e: any) => {
-              if (e.start_date !== currentDate) {
-                currentDate = e.start_date;
-                // 處理可能包含時間的 ISO 字串 (例如 2026-04-15T00:00:00.000Z) 或純日期字串 (2026-04-15)
-                const datePart = currentDate.split('T')[0];
-                const [y, m, d] = datePart.split('-').map(Number);
+              if (e.tw_start_date !== currentDate) {
+                currentDate = e.tw_start_date;
+                const [y, m, d] = currentDate.split('-').map(Number);
                 responseText += `\n📌 ${m}/${d}：\n`;
               }
               const timeStr = e.time ? `[${e.time}] ` : '';
