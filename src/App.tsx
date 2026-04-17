@@ -740,6 +740,7 @@ export default function App() {
       member_name: event.member_name || FAMILY_MEMBERS[0],
       color: event.color || MEMBER_COLORS[FAMILY_MEMBERS[0]],
       companions: (event as any).companions || '',
+      is_important: event.is_important || false,
     });
     setIsModalOpen(true);
   };
@@ -826,6 +827,7 @@ export default function App() {
       member_name: FAMILY_MEMBERS[0],
       color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
       companions: '',
+      is_important: false,
     });
     showToast(isEditing ? '活動已更新' : '活動已儲存');
 
@@ -1136,6 +1138,7 @@ export default function App() {
                 time: '',
                 member_name: FAMILY_MEMBERS[0],
                 color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+                is_important: false,
               });
               setIsModalOpen(true);
             }}
@@ -1248,6 +1251,7 @@ export default function App() {
                   time: '',
                   member_name: FAMILY_MEMBERS[0],
                   color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+                  is_important: false,
                 });
                 setIsModalOpen(true);
               }}
@@ -2439,9 +2443,14 @@ export default function App() {
                       setIsDayModalOpen(false);
                       setEditingEventId(null);
                       setNewEvent({
-                        ...newEvent,
+                        title: '',
+                        description: '',
                         start_date: format(selectedDay, 'yyyy-MM-dd'),
                         end_date: format(selectedDay, 'yyyy-MM-dd'),
+                        time: '',
+                        member_name: FAMILY_MEMBERS[0],
+                        color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+                        is_important: false,
                       });
                       setIsModalOpen(true);
                     }}
@@ -2507,9 +2516,14 @@ export default function App() {
                       setIsDayModalOpen(false);
                       setEditingEventId(null);
                       setNewEvent({
-                        ...newEvent,
+                        title: '',
+                        description: '',
                         start_date: format(selectedDay, 'yyyy-MM-dd'),
                         end_date: format(selectedDay, 'yyyy-MM-dd'),
+                        time: '',
+                        member_name: FAMILY_MEMBERS[0],
+                        color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+                        is_important: false,
                       });
                       setIsModalOpen(true);
                     }}
