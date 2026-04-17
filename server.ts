@@ -109,11 +109,52 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // 1. Logging middleware (Top level)
+  app.use((req, res, next) => {
+    if (req.url === "/api/line/webhook") {
+      console.log(`📡 [Incoming Webhook] ${req.method} ${req.url}`);
+    }
+    next();
+  });
+
+  // 2. LINE Webhook
+  // CRITICAL: We need both secret and token for the official middleware to work and for we to reply.
+  const hasLineConfig = !!(lineConfig.channelAccessToken && lineConfig.channelSecret);
+  const lineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => next();
+  
+  app.post("/api/line/webhook", (req, res, next) => {
+    if (!hasLineConfig) {
+      // If config is missing, we still want to log that we received something
+      console.log("⚠️ LINE Webhook received but LINE_CHANNEL_SECRET or ACCESS_TOKEN is missing.");
+      // We need express.json() for this specific case if we want to see the body, 
+      // but since we can't reply anyway, we just end.
+      return res.status(200).send("Config missing");
+    }
+    next();
+  }, lineMiddleware, async (req, res) => {
+    console.log("📩 LINE Webhook Verified & Received!");
+    try {
+      const events: WebhookEvent[] = req.body.events;
+      if (!events || !Array.isArray(events)) {
+        console.warn("⚠️ Received LINE webhook with no events array in body.");
+        return res.json({ success: true, warning: 'no_events' });
+      }
+      console.log(`📦 Received ${events.length} LINE events`);
+      await Promise.all(events.map(handleLineEvent));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("❌ LINE Webhook Error during processing:", err);
+      res.status(500).end();
+    }
+  });
+
+  // 3. General Middlewares
   app.use(express.json());
 
-  // Logging middleware
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    if (req.url !== "/api/line/webhook") {
+      console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    }
     next();
   });
 
@@ -259,25 +300,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("❌ GET /api/cron/daily-push Error:", error);
       res.status(500).json({ error: error.message });
-    }
-  });
-
-  // LINE Webhook
-  const lineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => next();
-  app.post("/api/line/webhook", lineMiddleware, async (req, res) => {
-    console.log("📩 LINE Webhook received event!");
-    if (!lineClient) {
-      console.warn("⚠️ LINE client not initialized, check tokens.");
-      return res.sendStatus(200);
-    }
-    try {
-      const events: WebhookEvent[] = req.body.events;
-      console.log(`📦 Received ${events.length} LINE events`);
-      await Promise.all(events.map(handleLineEvent));
-      res.json({ success: true });
-    } catch (err) {
-      console.error("❌ LINE Webhook Error during processing:", err);
-      res.status(500).end();
     }
   });
 
