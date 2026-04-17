@@ -239,7 +239,6 @@ export default function App() {
   const [quickSelectType, setQuickSelectType] = useState<'leave' | 'work'>('leave');
   const pendingQuickLeaves = useRef<Set<string>>(new Set());
   const pendingQuickWorks = useRef<Set<string>>(new Set());
-  const [isMigrating, setIsMigrating] = useState(false);
   const [isElderlyMode, setIsElderlyMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('elderlyMode') === 'true';
@@ -274,27 +273,6 @@ export default function App() {
       localStorage.setItem('elderlyMode', 'false');
     }
   }, [isElderlyMode]);
-
-  const handleMigrate = async () => {
-    if (!window.confirm('確定要將所有 Google Sheets 資料搬遷至 Firestore 嗎？這將會完整同步現有資料，並將 Firestore 作為未來的主要資料庫。')) return;
-    
-    setIsMigrating(true);
-    try {
-      const res = await fetch('/api/admin/migrate-to-firestore', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setToast({ message: `資料搬遷完成！共成功同步 ${data.totalMigrated} 筆行程。`, type: 'success' });
-        // Refresh events
-        window.location.reload();
-      } else {
-        throw new Error(data.error || '搬遷時發生錯誤');
-      }
-    } catch (err: any) {
-      setToast({ message: `搬遷失敗：${err.message}`, type: 'error' });
-    } finally {
-      setIsMigrating(false);
-    }
-  };
 
   const handleDragStart = (e: React.DragEvent, eventId: string | number) => {
     e.dataTransfer.setData('eventId', String(eventId));
@@ -1256,25 +1234,6 @@ export default function App() {
             長輩模式
           </button>
 
-          {/* Hidden Admin Button for Migration (Alt+Click to see or just Dev use) */}
-          <button 
-            onClick={(e) => {
-              if (e.altKey || window.confirm('啟動資料全量搬遷 (Sheets -> Firestore)？')) {
-                handleMigrate();
-              }
-            }}
-            disabled={isMigrating}
-            className={cn(
-              "flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm border",
-              isMigrating 
-                ? "bg-stone-100 text-stone-400 border-stone-200 animate-pulse" 
-                : "bg-white dark:bg-stone-800 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800 hover:border-indigo-300 hover:text-indigo-500"
-            )}
-            title="搬遷資料至 Firebase"
-          >
-            {isMigrating ? '搬遷中...' : '資料同步'}
-          </button>
-          
           <button 
             onClick={() => {
               setEditingEventId(null);
