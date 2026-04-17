@@ -1560,7 +1560,7 @@ async function startServer() {
         });
         }
       } catch (error: any) {
-        console.error("Google Sheets API Update Error:", error.message);
+        console.error("DEBUG: Google Sheets API Update Error for ID", id, ":", error.message);
       }
     }
 
@@ -1692,6 +1692,7 @@ async function startServer() {
             event: { ...eventData, id, is_important: !!is_important }
           });
         } else {
+          console.log(`DEBUG: Event ID ${id} NOT found in SQLite update fallback.`);
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         }
       } else {
