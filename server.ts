@@ -123,6 +123,9 @@ async function fetchEventsInternal() {
                   else if (normalized === 'time') event.time = value;
                   else if (normalized === 'membername') event.member_name = value;
                   else if (normalized === 'color') event.color = value;
+                  else if (normalized === 'important' || normalized === '重要') {
+                    event.is_important = /^(yes|true|1|v|o|y|是|重要)$/i.test(value.toString().trim());
+                  }
                   event[rawHeader] = value;
                 });
                 if (!event.title) event.title = "無標題";
@@ -175,9 +178,9 @@ async function fetchEventsInternal() {
 let sheetsInstance: any = null;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 let MAIN_SHEET_NAME = "Sheet1";
-let RANGE = `${MAIN_SHEET_NAME}!A:G`;
+let RANGE = `${MAIN_SHEET_NAME}!A:Z`;
 const LEAVES_SHEET_NAME = "假表紀錄";
-let LEAVES_RANGE = `${LEAVES_SHEET_NAME}!A:G`;
+let LEAVES_RANGE = `${LEAVES_SHEET_NAME}!A:Z`;
 
 async function getSheets() {
   if (sheetsInstance) return sheetsInstance;
@@ -243,7 +246,7 @@ async function initializeSheet() {
       } else {
         MAIN_SHEET_NAME = sheetNames[0] || "Sheet1";
       }
-      RANGE = `${MAIN_SHEET_NAME}!A:G`;
+      RANGE = `${MAIN_SHEET_NAME}!A:Z`;
     }
 
     if (!sheetNames.includes(LEAVES_SHEET_NAME)) {
@@ -879,14 +882,34 @@ async function startServer() {
       message += `\n`;
 
       if (todaysEvents.length > 0) {
-        todaysEvents.forEach((e: any, index: number) => {
-          message += `📌 ${index + 1}. ${e.title}\n`;
-          if (e.time) message += `⏰ 時間：${e.time}\n`;
-          if (e.member_name) message += `👤 成員：${e.member_name}\n`;
-          if (e.companions) message += `👥 同行：${e.companions}\n`;
-          if (e.description) message += `📝 備註：${e.description}\n`;
-          message += `\n`;
-        });
+        const importantEvents = todaysEvents.filter((e: any) => e.is_important);
+        const normalEvents = todaysEvents.filter((e: any) => !e.is_important);
+
+        if (importantEvents.length > 0) {
+          message += `🚨 【重要公告】 🚨\n`;
+          importantEvents.forEach((e: any, index: number) => {
+            message += `⭐ ${e.title}\n`;
+            if (e.time) message += `⏰ 時間：${e.time}\n`;
+            if (e.member_name) message += `👤 成員：${e.member_name}\n`;
+            if (e.companions) message += `👥 同行：${e.companions}\n`;
+            if (e.description) message += `📝 備註：${e.description}\n`;
+            message += `\n`;
+          });
+          message += `-------------------\n\n`;
+        }
+
+        if (normalEvents.length > 0) {
+          let normalIndex = 1;
+          normalEvents.forEach((e: any) => {
+            message += `📌 ${normalIndex}. ${e.title}\n`;
+            if (e.time) message += `⏰ 時間：${e.time}\n`;
+            if (e.member_name) message += `👤 成員：${e.member_name}\n`;
+            if (e.companions) message += `👥 同行：${e.companions}\n`;
+            if (e.description) message += `📝 備註：${e.description}\n`;
+            message += `\n`;
+            normalIndex++;
+          });
+        }
       } else {
         message += `📌 今日無特別排程活動\n\n`;
       }
@@ -935,7 +958,7 @@ async function startServer() {
       const dd = String(today.getDate()).padStart(2, '0');
       const todayStr = `${yyyy}-${mm}-${dd}`;
 
-      const { title, start_date, end_date, time, member_name, companions, description } = eventData;
+      const { title, start_date, end_date, time, member_name, companions, description, is_important } = eventData;
 
       const todayTime = new Date(yyyy, today.getMonth(), today.getDate()).getTime();
       
@@ -980,6 +1003,7 @@ async function startServer() {
         ]);
 
         let message = isNew ? `🚨 【臨時新增】今日活動通知\n` : `🚨 【臨時修改】今日活動通知\n`;
+        if (is_important) message += `⭐ 置頂重要公告 ⭐\n`;
         if (holidayStr) message += `🎈 節日：${holidayStr}\n`;
         if (weatherStr) message += `⛅ 天氣：${weatherStr}\n`;
         message += `\n`;
@@ -1001,7 +1025,7 @@ async function startServer() {
     enqueueWrite(async () => {
       await initializeSheet();
       const eventData = req.body;
-    const { title, description, start_date, end_date, time, member_name, color, companions } = eventData;
+    const { title, description, start_date, end_date, time, member_name, color, companions, is_important } = eventData;
     const eventId = uuidv4(); 
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
@@ -1075,11 +1099,13 @@ async function startServer() {
           if (header === 'membername') return member_name;
           if (header === 'color') return color;
           if (header === 'companions') return companions || "";
+          if (header === 'important' || header === '重要') return is_important ? "是" : "";
           return "";
         });
 
         // If no headers found or mapping failed, use default order
-        const finalRow = newRow.length > 0 ? newRow : [eventId, title, description, start_date, end_date, time || "", member_name, color, companions || ""];
+        // Add "重要" column to the default order if we need to fall back
+        const finalRow = newRow.length > 0 ? newRow : [eventId, title, description, start_date, end_date, time || "", member_name, color, companions || "", is_important ? "是" : ""];
         
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
@@ -1140,7 +1166,7 @@ async function startServer() {
       await initializeSheet();
       const { id } = req.params;
     const eventData = req.body;
-    const { title, description, start_date, end_date, time, member_name, color, companions, original_title } = eventData;
+    const { title, description, start_date, end_date, time, member_name, color, companions, original_title, is_important } = eventData;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
     // Priority 1: Google Apps Script
@@ -1334,11 +1360,12 @@ async function startServer() {
             if (header === 'membername') return member_name;
             if (header === 'color') return color;
             if (header === 'companions') return companions || "";
+            if (header === 'important' || header === '重要') return is_important ? "是" : "";
             return "";
           });
 
           // If mapping failed, use default order
-          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color, companions || ""];
+          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color, companions || "", is_important ? "是" : ""];
 
           await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,

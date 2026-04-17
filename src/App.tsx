@@ -70,6 +70,7 @@ interface Event {
   member_name: string;
   color: string;
   companions?: string;
+  is_important?: boolean;
 }
 
 const FAMILY_MEMBERS = ['全家', '江雪卿', '黃喬裕', '陳愉婷', '黃宣綾', '黃宣綸', '黃郁婷', '郭力維', '黃郁慈', '郭品佑', '郭品彤'];
@@ -1734,6 +1735,7 @@ export default function App() {
                                 (event as any).syncing && "opacity-50 animate-pulse"
                               )}
                             >
+                              {event.is_important && <span className="shrink-0 text-amber-500">⭐</span>}
                               {icon && <span className="shrink-0">{icon}</span>}
                               <span className="truncate">{eventTitle}</span>
                             </div>
@@ -1785,6 +1787,7 @@ export default function App() {
                                 (event as any).syncing && "opacity-50 animate-pulse"
                               )}
                             >
+                              {event.is_important && <span className="shrink-0 text-amber-500">⭐</span>}
                               {icon && <span className="shrink-0">{icon}</span>}
                               <span className="truncate">{eventTitle}</span>
                             </div>
@@ -2225,6 +2228,19 @@ export default function App() {
                       />
                     </div>
                   )}
+                </div>
+
+                <div className="flex items-center space-x-2 pt-1 pb-1">
+                  <input
+                    type="checkbox"
+                    id="is_important"
+                    checked={newEvent.is_important || false}
+                    onChange={e => setNewEvent({ ...newEvent, is_important: e.target.checked })}
+                    className="w-5 h-5 text-indigo-600 bg-stone-100 border-stone-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-stone-800 focus:ring-2 dark:bg-stone-700 dark:border-stone-600 cursor-pointer"
+                  />
+                  <label htmlFor="is_important" className={cn("font-bold text-rose-600 dark:text-rose-400 flex items-center cursor-pointer", isElderlyMode ? "text-xl" : "text-sm")}>
+                    🚀 設為重要 (LINE推播置頂公告)
+                  </label>
                 </div>
 
                 {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
