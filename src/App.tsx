@@ -2460,6 +2460,26 @@ export default function App() {
                   />
                 </div>
 
+                <div className="flex items-center gap-3 py-2 px-1 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-100/50 dark:border-amber-900/20">
+                  <div className="flex-1">
+                    <label className={cn("block font-black text-amber-700 dark:text-amber-500 uppercase tracking-widest", isElderlyMode ? "text-xl" : "text-xs")}>標記為重要行程</label>
+                    <p className={cn("text-amber-600/60 dark:text-amber-500/40 font-bold", isElderlyMode ? "text-lg" : "text-[10px]")}>此行程將會顯示在置頂區域並同步至 LINE 重要通知</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewEvent({...newEvent, is_important: !newEvent.is_important})}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                      newEvent.is_important ? "bg-amber-500" : "bg-stone-200 dark:bg-stone-700"
+                    )}
+                  >
+                    <span className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      newEvent.is_important ? "translate-x-6" : "translate-x-1"
+                    )} />
+                  </button>
+                </div>
+
                 <div className="pt-2 pb-6 md:pb-2">
                   <button 
                     type="submit"

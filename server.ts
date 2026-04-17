@@ -303,6 +303,56 @@ async function startServer() {
     }
   });
 
+  // API: Hourly Important Reminder (Cron)
+  app.get("/api/cron/hourly-reminder", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+
+      const tz = "Asia/Taipei";
+      const now = new Date();
+      // 我們要找「現在 + 1小時」的行程
+      const targetTime = new Date(now.getTime() + 60 * 60 * 1000);
+      const targetDateStr = new Date(targetTime.toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("zh-TW", { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      const targetTimeStr = targetTime.toLocaleTimeString("zh-TW", { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' });
+      
+      console.log(`📡 Checking for important reminders at ${targetDateStr} around ${targetTimeStr}`);
+
+      const snapshot = await database.collection('events').get();
+      const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
+      
+      // 篩選：標記為重要、日期正確、且時間在 1 小時後 (允許 +/- 5 分鐘誤差以配合 Cron 頻率)
+      const reminders = events.filter((e: any) => {
+        if (!e.is_important || !e.time || e.start_date !== targetDateStr) return false;
+        
+        // 解析時間格式如 "14:30"
+        const [h, m] = e.time.split(':').map(Number);
+        const [th, tm] = targetTimeStr.split(':').map(Number);
+        
+        // 比對小時與分鐘 (在目標分鐘的前後 5 分鐘內)
+        const eventTotalMins = h * 60 + m;
+        const targetTotalMins = th * 60 + tm;
+        
+        return Math.abs(eventTotalMins - targetTotalMins) <= 5;
+      });
+
+      if (reminders.length === 0) {
+        return res.json({ success: true, message: "No reminders due" });
+      }
+
+      for (const e of reminders) {
+        let msg = `🔔 【重要行程提醒】\n活動將在 1 小時後開始！\n\n📌 主旨：${e.title}\n🕒 時間：${e.time}\n👤 對象：${e.member_name}\n`;
+        if (e.description) msg += `📝 備註：${e.description}`;
+        await sendLineNotification(msg.trim());
+      }
+
+      res.json({ success: true, count: reminders.length });
+    } catch (error: any) {
+      console.error("❌ GET /api/cron/hourly-reminder Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   async function handleLineEvent(event: WebhookEvent) {
     if (!lineClient) return;
     console.log(`🔍 Processing event type: ${event.type}`);
@@ -408,8 +458,45 @@ async function startServer() {
         if (holiday) msg += `\n\n🏮 今日節慶：${holiday}`;
         return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg });
       }
+
+      // 指令 4: 重要行程
+      if (text === '重要行程' || text === '重要' || text === '重要事項') {
+        try {
+          const database = getDb();
+          if (!database) {
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '抱歉，資料庫連線中，請稍後再試。' });
+          }
+          
+          const nowStr = new Date().toISOString().split('T')[0];
+          const snapshot = await database.collection('events').get();
+          const allEvents = snapshot.docs.map((doc: any) => doc.data());
+          
+          // 篩選未來的重要行程
+          let filtered = allEvents.filter((e: any) => e.is_important === true && (e.end_date || e.start_date) >= nowStr);
+          
+          // 排序
+          filtered.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
+
+          if (filtered.length === 0) {
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '🔔 目前沒有標記為重要的未來行程喔！' });
+          }
+
+          let msg = `🌟 置頂重要行程公告：\n\n`;
+          filtered.forEach((e: any, index: number) => {
+            msg += `${index + 1}. [${e.start_date.slice(5)}] ${e.title}\n`;
+            if (e.member_name) msg += `   👤 負責：${e.member_name}\n`;
+            if (e.description) msg += `   📝 備註：${e.description}\n`;
+            msg += '\n';
+          });
+          
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg.trim() });
+        } catch (dbErr) {
+          console.error("❌ Database query failed in LINE event:", dbErr);
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: '讀取重要行程時發生錯誤。' });
+        }
+      }
       
-      // 指令 4: 指令說明
+      // 指令 5: 指令說明
       if (text === '幫助' || text === '說明' || text === 'help') {
         return lineClient.replyMessage(event.replyToken, { 
           type: 'text', 
@@ -418,9 +505,10 @@ async function startServer() {
                 '2. 「明天行程」：看明天的排程\n' +
                 '3. 「近期行程」：看未來一週的排程\n' +
                 '4. 「[人名]行程」：看特定人的行程 (如: 小明行程)\n' +
-                '5. 「天氣」：看目前天氣與節慶\n' +
-                '6. 「id」：取得對話 ID\n' +
-                '7. 「幫助」：顯示此說明' 
+                '5. 「重要行程」：查看所有標記為重要的活動\n' +
+                '6. 「天氣」：看目前天氣與節慶\n' +
+                '7. 「id」：取得對話 ID\n' +
+                '8. 「幫助」：顯示此說明' 
         });
       }
     }
