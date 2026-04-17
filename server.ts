@@ -265,40 +265,88 @@ async function startServer() {
   // LINE Webhook
   const lineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => next();
   app.post("/api/line/webhook", lineMiddleware, async (req, res) => {
-    if (!lineClient) return res.sendStatus(200);
+    console.log("📩 LINE Webhook received event!");
+    if (!lineClient) {
+      console.warn("⚠️ LINE client not initialized, check tokens.");
+      return res.sendStatus(200);
+    }
     try {
       const events: WebhookEvent[] = req.body.events;
+      console.log(`📦 Received ${events.length} LINE events`);
       await Promise.all(events.map(handleLineEvent));
       res.json({ success: true });
     } catch (err) {
-      console.error("❌ LINE Webhook Error:", err);
+      console.error("❌ LINE Webhook Error during processing:", err);
       res.status(500).end();
     }
   });
 
   async function handleLineEvent(event: WebhookEvent) {
     if (!lineClient) return;
-    if (event.type === 'join' && event.source.type === 'group') {
-      return lineClient.replyMessage(event.replyToken, { type: 'text', text: `機器人已加入！群組 ID：\n${event.source.groupId}` });
+    console.log(`🔍 Processing event type: ${event.type}`);
+
+    // 加入群組時回傳 ID
+    if (event.type === 'join') {
+      const source = event.source;
+      const id = source.type === 'group' ? source.groupId : 'unknown';
+      console.log(`👋 Joined a ${source.type}, ID: ${id}`);
+      return lineClient.replyMessage(event.replyToken, { 
+        type: 'text', 
+        text: `機器人已就位！\n目前的群組/聊天 ID 是：\n${id}\n\n請將此 ID 設定至環境變數 LINE_GROUP_ID 以啟用推播功能。` 
+      });
     }
+
     if (event.type === 'message' && event.message.type === 'text') {
-      const text = event.message.text.trim().toLowerCase();
-      if (text === 'id') {
-        const id = event.source.type === 'group' ? event.source.groupId : event.source.userId;
-        return lineClient.replyMessage(event.replyToken, { type: 'text', text: `ID：${id}` });
+      const text = event.message.text.trim();
+      console.log(`💬 Received message: "${text}" from ${event.source.type}`);
+
+      // 指令 1: 取得 ID
+      if (text.toLowerCase() === 'id' || text === '群組id' || text === '我的id') {
+        const id = (event.source as any).groupId || (event.source as any).userId;
+        return lineClient.replyMessage(event.replyToken, { type: 'text', text: `您的 ID 是：\n${id}` });
       }
-      if (text === '今天行程' || text === '今日行程') {
-        const database = getDb();
-        if (!database) return;
-        const todayStr = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-        const snapshot = await database.collection('events').get();
-        const events = snapshot.docs.map((doc: any) => doc.data());
-        const filtered = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
-        
-        let msg = filtered.length > 0 
-          ? filtered.map((e: any) => `• ${e.title} (${e.member_name})`).join('\n')
-          : '今天沒有排定的行程喔！';
-        return lineClient.replyMessage(event.replyToken, { type: 'text', text: `📅 今日行程：\n${msg}` });
+
+      // 指令 2: 今天行程
+      if (text === '今天行程' || text === '今日行程' || text === '當日行程') {
+        try {
+          const database = getDb();
+          if (!database) {
+            console.error("❌ Firestore not initialized inside LINE event");
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '抱歉，資料庫連線中，請稍後再試。' });
+          }
+          
+          const tz = "Asia/Taipei";
+          const todayStr = new Date().toLocaleDateString("zh-TW", { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+          
+          console.log(`📅 Searching events for: ${todayStr}`);
+          const snapshot = await database.collection('events').get();
+          const allEvents = snapshot.docs.map((doc: any) => doc.data());
+          const filtered = allEvents.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
+          
+          if (filtered.length === 0) {
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: `📅 ${todayStr}\n今天沒有排定的行程喔！✨` });
+          }
+
+          let msg = `📅 ${todayStr} 行程摘要：\n\n`;
+          filtered.forEach((e: any, index: number) => {
+            msg += `${index + 1}. [${e.member_name}] ${e.title}`;
+            if (e.time) msg += ` (${e.time})`;
+            msg += '\n';
+          });
+          
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg.trim() });
+        } catch (dbErr) {
+          console.error("❌ Database query failed in LINE event:", dbErr);
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: '讀取行程時發生錯誤，請聯絡管理員。' });
+        }
+      }
+      
+      // 指令 3: 指令說明
+      if (text === '幫助' || text === '說明' || text === 'help') {
+        return lineClient.replyMessage(event.replyToken, { 
+          type: 'text', 
+          text: '🤖 機器人指令說明：\n1. 輸入「今天行程」：查看今日所有人的排程。\n2. 輸入「id」：取得目前對話或群組的 ID。\n3. 輸入「幫助」：顯示此說明。' 
+        });
       }
     }
   }
