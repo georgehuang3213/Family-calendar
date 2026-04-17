@@ -47,9 +47,10 @@ const WRITE_BUFFER_TTL = 60000; // Increase to 60 seconds for better consistency
 
 function updateWriteBuffer(id: string | number, eventData: any) {
   const idStr = String(id);
-  console.log(`📡 Updating write buffer for event ${idStr}`);
+  const signature = `${eventData.title}|${eventData.start_date}|${eventData.member_name}`.toLowerCase().trim();
+  console.log(`📡 Updating write buffer for event ${idStr} (sig: ${signature})`);
   writeBuffer.set(idStr, { 
-    event: { ...eventData, id: idStr }, 
+    event: { ...eventData, id: idStr, signature }, 
     timestamp: Date.now() 
   });
 }
@@ -65,10 +66,15 @@ function applyWriteBuffer(events: any[]) {
     }
   }
 
-  // Map to help with secondary matching
+  // Pre-calculate signatures for fetched events
+  const resultWithSigs = result.map(e => ({
+    ...e,
+    signature: e.signature || `${e.title}|${e.start_date}|${e.member_name}`.toLowerCase().trim()
+  }));
+
   const bufferValues = Array.from(writeBuffer.values());
 
-  const finalResult = result.map(fetchedEvent => {
+  const finalResult = resultWithSigs.map(fetchedEvent => {
     const fetchedId = String(fetchedEvent.id);
     const uuid = fetchedEvent.uuid ? String(fetchedEvent.uuid) : null;
     
@@ -80,17 +86,15 @@ function applyWriteBuffer(events: any[]) {
       buffered = bufferValues.find(b => b.event.uuid === uuid);
     }
     
-    // Priority 3: Cross-source ID match (e.g. "5" matches "Sheet1-5" or vice versa)
+    // Priority 3: Signature match (The ultimate bridge for eventual consistency)
     if (!buffered) {
-      buffered = bufferValues.find(b => {
-        const bId = String(b.event.id);
-        return bId.endsWith(`-${fetchedId}`) || fetchedId.endsWith(`-${bId}`);
-      });
+      buffered = bufferValues.find(b => b.event.signature === fetchedEvent.signature);
     }
 
     if (buffered) {
-      console.log(`📡 Applying buffered state to event ${fetchedId} (Match found by ${buffered.event.uuid === uuid ? 'UUID' : 'ID'})`);
-      return { ...fetchedEvent, ...buffered.event };
+      console.log(`📡 Applying buffered state to event ${fetchedId} (Match: ${buffered.event.signature})`);
+      // Keep fetched ID but take everything else from buffer
+      return { ...fetchedEvent, ...buffered.event, id: fetchedId };
     }
     return fetchedEvent;
   });
@@ -98,12 +102,14 @@ function applyWriteBuffer(events: any[]) {
   // Append new events that are in buffer but not yet in fetched results
   const finalFetchedIds = new Set(finalResult.map(e => String(e.id)));
   const finalFetchedUuids = new Set(finalResult.filter(e => e.uuid).map(e => String(e.uuid)));
-  
+  const finalFetchedSigs = new Set(finalResult.map(e => e.signature));
+
   for (const entry of bufferValues) {
     const bId = String(entry.event.id);
     const bUuid = entry.event.uuid ? String(entry.event.uuid) : null;
+    const bSig = entry.event.signature;
     
-    if (!finalFetchedIds.has(bId) && (!bUuid || !finalFetchedUuids.has(bUuid))) {
+    if (!finalFetchedIds.has(bId) && (!bUuid || !finalFetchedUuids.has(bUuid)) && !finalFetchedSigs.has(bSig)) {
       console.log(`📡 Appending buffered new event: ${entry.event.title} (${bId})`);
       finalResult.push(entry.event);
     }
@@ -156,6 +162,8 @@ async function fetchEventsInternal() {
 
             const mainRows = mainResponse.data.values || [];
 
+            const isLeave = (t: string) => ['請假', '排休', '特休', '補休', '公休', '休假'].some(kw => t.includes(kw));
+
             const processRows = (rows: any[][], sheetName: string) => {
               if (!rows || rows.length <= 1) return [];
               const rawHeaders = rows[0];
@@ -175,24 +183,68 @@ async function fetchEventsInternal() {
                   else if (normalized === 'color') event.color = value;
                   else if (normalized === 'important' || normalized === '重要') {
                     event.is_important = /^(yes|true|1|v|o|y|是|重要)$/i.test(value.toString().trim());
-                    event._has_important_col = true;
+                    event._col_important = true;
                   }
                   event[rawHeader] = value;
                 });
+                
                 if (!event.title) event.title = "無標題";
                 if (!event.start_date) event.start_date = new Date().toISOString().split('T')[0];
                 if (!event.end_date) event.end_date = event.start_date;
                 if (!event.member_name) event.member_name = "全家";
                 if (!event.color) event.color = "#4F46E5";
+                
+                // Add a unique signature for cross-source matching
+                event.signature = `${event.title}|${event.start_date}|${event.member_name}`.toLowerCase().trim();
+                
                 return event;
               });
             };
 
-            events = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
+            const remoteEvents = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
+            
+            // Merge with SQLite to protect 'is_important' status
+            if (db_local) {
+              try {
+                const localRows = db_local.prepare("SELECT uuid, id, title, start_date, member_name, is_important FROM events").all();
+                const statusMap = new Map();
+                localRows.forEach((r: any) => {
+                  if (r.uuid) statusMap.set(String(r.uuid), r.is_important);
+                  if (r.id) statusMap.set(String(r.id), r.is_important);
+                  const sig = `${r.title}|${r.start_date}|${r.member_name}`.toLowerCase().trim();
+                  statusMap.set(sig, r.is_important);
+                });
+                
+                events = remoteEvents.map(ev => {
+                  const idStr = String(ev.id);
+                  const uuidStr = ev.uuid ? String(ev.uuid) : null;
+                  const sig = ev.signature;
+                  
+                  const localImportance = statusMap.get(idStr) ?? (uuidStr ? statusMap.get(uuidStr) : null) ?? statusMap.get(sig);
+                  
+                  // Defensive merging: 
+                  // 1. If SQLite says it's important, we trust it over Sheets for the first 60s (handled by buffer)
+                  // 2. Beyond that, if the Sheet explicitly lacks the column, we trust SQLite.
+                  // 3. If the Sheet has the column and says it's NOT important, we trust that, UNLESS the change was very recent (captured by buffer above).
+                  if (localImportance !== undefined) {
+                    if (!ev._col_important) {
+                       ev.is_important = Boolean(localImportance);
+                    }
+                  }
+                  return ev;
+                });
+              } catch (e) {
+                console.error("Merge error:", e);
+                events = remoteEvents;
+              }
+            } else {
+              events = remoteEvents;
+            }
+
             events = applyWriteBuffer(events);
             source = "google_sheets_api";
 
-            // Sync with local SQLite to ensure fallback has latest 'important' status
+            // Sync with local SQLite (carefully)
             if (db_local && events.length > 0) {
               enqueueWrite(async () => {
                 try {
@@ -207,20 +259,16 @@ async function fetchEventsInternal() {
                       member_name=excluded.member_name,
                       color=excluded.color,
                       time=excluded.time,
-                      is_important=CASE WHEN excluded.is_important = -1 THEN is_important ELSE excluded.is_important END,
+                      is_important=excluded.is_important,
                       companions=excluded.companions
                   `);
                   
                   const transaction = db_local.transaction((syncEvents: any[]) => {
                     for (const ev of syncEvents) {
-                      const uuid = ev.uuid || ev.id;
-                      if (!uuid) continue;
-                      
-                      // -1 means we didn't find the column in this source, so keep SQLite's value
-                      const importanceVal = (ev.is_important === undefined) ? -1 : (ev.is_important ? 1 : 0);
-                      
+                      const idOrUuid = ev.uuid || ev.id;
+                      if (!idOrUuid) continue;
                       upsertStmt.run(
-                        String(uuid),
+                        String(idOrUuid),
                         ev.title || "無標題",
                         ev.description || "",
                         ev.start_date || "",
@@ -228,7 +276,7 @@ async function fetchEventsInternal() {
                         ev.member_name || "全家",
                         ev.color || "#4F46E5",
                         ev.time || "",
-                        importanceVal,
+                        ev.is_important ? 1 : 0,
                         ev.companions || ""
                       );
                     }
@@ -255,63 +303,46 @@ async function fetchEventsInternal() {
             throw new Error("Apps Script returned HTML instead of JSON.");
           }
 
-          if (Array.isArray(response.data)) {
-            let eventsFromScript = applyWriteBuffer(response.data);
+          if (Array.isArray(response.data) || (response.data && Array.isArray(response.data.events))) {
+            const rawEventsFromScript = Array.isArray(response.data) ? response.data : response.data.events;
+            let eventsFromScript = applyWriteBuffer(rawEventsFromScript);
             
-            // Merge with local SQLite data to preserve 'is_important' if Apps Script misses it
+            // Merge with local SQLite data to protect 'is_important' status
             if (db_local) {
               try {
-                const localRows = db_local.prepare("SELECT uuid, id, is_important FROM events").all();
-                const localMap = new Map();
+                // Load all local status for merging
+                const localRows = db_local.prepare("SELECT uuid, id, title, start_date, member_name, is_important FROM events").all();
+                const statusMap = new Map();
                 localRows.forEach((r: any) => {
-                  if (r.uuid) localMap.set(String(r.uuid), r.is_important);
-                  if (r.id) localMap.set(String(r.id), r.is_important);
+                  if (r.uuid) statusMap.set(String(r.uuid), r.is_important);
+                  if (r.id) statusMap.set(String(r.id), r.is_important);
+                  const sig = `${r.title}|${r.start_date}|${r.member_name}`.toLowerCase().trim();
+                  statusMap.set(sig, r.is_important);
                 });
                 
-                eventsFromScript = eventsFromScript.map((ev: any) => {
-                  if (ev.is_important === undefined || ev.is_important === null) {
-                    const localStatus = localMap.get(String(ev.id)) || localMap.get(String(ev.uuid));
-                    if (localStatus !== undefined) {
-                      return { ...ev, is_important: Boolean(localStatus) };
+                events = eventsFromScript.map((ev: any) => {
+                  const idStr = String(ev.id);
+                  const uuidStr = ev.uuid ? String(ev.uuid) : null;
+                  const sig = `${ev.title}|${ev.start_date}|${ev.member_name}`.toLowerCase().trim();
+                  
+                  const localImportance = statusMap.get(idStr) ?? (uuidStr ? statusMap.get(uuidStr) : null) ?? statusMap.get(sig);
+                  
+                  // If local says it's important, we trust it, especially since Apps Script often lacks this column
+                  if (localImportance !== undefined) {
+                    if (Boolean(localImportance) || ev.is_important === undefined) {
+                      ev.is_important = Boolean(localImportance);
                     }
                   }
                   return ev;
                 });
               } catch (e) {
-                console.error("Local merge error:", e);
+                console.error("Apps Script local merge error:", e);
+                events = eventsFromScript;
               }
+            } else {
+              events = eventsFromScript;
             }
             
-            events = eventsFromScript;
-            source = "google_apps_script";
-          } else if (response.data && Array.isArray(response.data.events)) {
-            let eventsFromScript = applyWriteBuffer(response.data.events);
-            
-            // Merge with local SQLite data
-            if (db_local) {
-              try {
-                const localRows = db_local.prepare("SELECT uuid, id, is_important FROM events").all();
-                const localMap = new Map();
-                localRows.forEach((r: any) => {
-                  if (r.uuid) localMap.set(String(r.uuid), r.is_important);
-                  if (r.id) localMap.set(String(r.id), r.is_important);
-                });
-                
-                eventsFromScript = eventsFromScript.map((ev: any) => {
-                  if (ev.is_important === undefined || ev.is_important === null) {
-                    const localStatus = localMap.get(String(ev.id)) || localMap.get(String(ev.uuid));
-                    if (localStatus !== undefined) {
-                      return { ...ev, is_important: Boolean(localStatus) };
-                    }
-                  }
-                  return ev;
-                });
-              } catch (e) {
-                console.error("Local merge error:", e);
-              }
-            }
-            
-            events = eventsFromScript;
             source = "google_apps_script";
           }
         } catch (e: any) {
@@ -1610,12 +1641,13 @@ async function startServer() {
         // Update local SQLite as well to keep it in sync
         try {
           if (db_local) {
+            const signature = `${title}|${start_date}|${member_name}`.toLowerCase();
             const stmt = db_local.prepare(`
               UPDATE events 
               SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?, is_important = ?
-              WHERE uuid = ? OR id = ?
+              WHERE uuid = ? OR id = ? OR LOWER(title || '|' || start_date || '|' || member_name) = ?
             `);
-            stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", is_important ? 1 : 0, id, id);
+            stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", is_important ? 1 : 0, id, id, signature);
           }
         } catch (e) {
           console.error("SQLite Update Error (Sync):", e);

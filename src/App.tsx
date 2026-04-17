@@ -445,6 +445,11 @@ export default function App() {
 
       if (!res.ok) throw new Error(result.error || '快速新增失敗');
       
+      // Update sticky lock
+      const lockData = { is_important: false, timestamp: Date.now() };
+      const signature = `${workEvent.title}|${workEvent.start_date}|${workEvent.member_name}`.toLowerCase().trim();
+      importanceLocker.current.set(signature, lockData);
+      
       showToast(`已成功新增 ${member} 上班`);
       
       if (result.id) {
@@ -616,6 +621,8 @@ export default function App() {
     }
   }, []);
 
+  const importanceLocker = useRef<Map<string, { is_important: boolean, timestamp: number }>>(new Map());
+
   const fetchEvents = async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
@@ -634,12 +641,34 @@ export default function App() {
         throw new Error(data.error || '無法取得活動資料');
       }
       
+      const now = Date.now();
+      const LOCK_TTL = 300000; // 5 minutes sticky lock
+      
       // 確保所有 ID 都轉換為字串，且 is_important 為布林值
-      const processedEvents = (data.events || []).map((event: Event) => ({
-        ...event,
-        id: String(event.id),
-        is_important: !!event.is_important
-      }));
+      const processedEvents = (data.events || []).map((event: Event) => {
+        let is_important = !!event.is_important;
+        const idStr = String(event.id);
+        const uuidStr = (event as any).uuid ? String((event as any).uuid) : '';
+        const signature = `${event.title}|${event.start_date}|${event.member_name}`.toLowerCase().trim();
+        
+        // Apply sticky lock if exists
+        const lock = importanceLocker.current.get(idStr) || 
+                     (uuidStr ? importanceLocker.current.get(uuidStr) : null) ||
+                     importanceLocker.current.get(signature);
+
+        if (lock && (now - lock.timestamp < LOCK_TTL)) {
+          if (is_important !== lock.is_important) {
+            console.log(`📡 Sticky lock applied for ${event.title}: forcing ${lock.is_important}`);
+            is_important = lock.is_important;
+          }
+        }
+
+        return {
+          ...event,
+          id: idStr,
+          is_important
+        };
+      });
       
       setEvents(processedEvents);
       setStorageSource(data.source || 'local');
@@ -839,6 +868,12 @@ export default function App() {
       }
 
       if (!res.ok) throw new Error(result.error || '儲存失敗');
+      
+      // Update sticky lock to prevent UI jump-back while sync propagates
+      const lockData = { is_important: !!newEvent.is_important, timestamp: Date.now() };
+      const signature = `${newEvent.title}|${newEvent.start_date}|${newEvent.member_name}`.toLowerCase().trim();
+      importanceLocker.current.set(signature, lockData);
+      if (editingEventId) importanceLocker.current.set(String(editingEventId), lockData);
       
       // Update with server confirmed data (prevents "jump back" if fetchEvents returns stale data)
       if (result.event) {
