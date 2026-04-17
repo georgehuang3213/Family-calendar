@@ -62,31 +62,8 @@ async function fetchEventsInternal() {
       let source = "unknown";
       let appsScriptWarning: string | undefined = undefined;
 
-      // Priority 1: Google Apps Script
-      if (APPS_SCRIPT_URL) {
-        try {
-          console.log("📡 Fetching events from Apps Script...");
-          const response = await axios.get(APPS_SCRIPT_URL, { timeout: 30000 });
-          
-          if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-            throw new Error("Apps Script returned HTML instead of JSON.");
-          }
-
-          if (Array.isArray(response.data)) {
-            events = response.data;
-            source = "google_apps_script";
-          } else if (response.data && Array.isArray(response.data.events)) {
-            events = response.data.events;
-            source = "google_apps_script";
-          }
-        } catch (e: any) {
-          console.error("❌ Apps Script Fetch Error:", e.message);
-          appsScriptWarning = e.message;
-        }
-      }
-
-      // Priority 2: Direct Sheets API
-      if (events.length === 0 && sheetInitStatus.success) {
+      // Priority 1: Direct Sheets API
+      if (sheetInitStatus.success) {
         try {
           console.log("📡 Fetching events from Direct Sheets API...");
           const sheets = await getSheets();
@@ -142,6 +119,29 @@ async function fetchEventsInternal() {
           }
         } catch (e: any) {
           console.error("❌ Sheets API Fetch Error:", e.message);
+        }
+      }
+
+      // Priority 2: Google Apps Script
+      if (events.length === 0 && APPS_SCRIPT_URL) {
+        try {
+          console.log("📡 Fetching events from Apps Script...");
+          const response = await axios.get(APPS_SCRIPT_URL, { timeout: 30000 });
+          
+          if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+            throw new Error("Apps Script returned HTML instead of JSON.");
+          }
+
+          if (Array.isArray(response.data)) {
+            events = response.data;
+            source = "google_apps_script";
+          } else if (response.data && Array.isArray(response.data.events)) {
+            events = response.data.events;
+            source = "google_apps_script";
+          }
+        } catch (e: any) {
+          console.error("❌ Apps Script Fetch Error:", e.message);
+          appsScriptWarning = e.message;
         }
       }
 
@@ -1039,45 +1039,13 @@ async function startServer() {
     const leaveKeywords = ['請假', '排休', '特休', '補休', '公休', '休假'];
     const isLeave = leaveKeywords.some(kw => title.includes(kw));
 
-    // Priority 1: Google Apps Script
-    if (APPS_SCRIPT_URL) {
-      try {
-        console.log("Saving event to Apps Script...");
-        const response = await axios.post(APPS_SCRIPT_URL, {
-          ...eventData,
-          action: eventData.action || 'create',
-          id: eventId,
-          isLeave: isLeave,
-          targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
-        }, { timeout: 15000 });
-        
-        if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-          throw new Error("Apps Script 傳回了 HTML 而非 JSON。");
-        }
-        
-        if (response.data && response.data.error) {
-          throw new Error(response.data.error);
-        }
-        
-        clearEventsCache();
-        checkAndSendSameDayNotification(eventData, true);
-        return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
-      } catch (error: any) {
-        console.error("Apps Script Save Error:", error.message);
-        if (!sheetInitStatus.success) {
-          return res.status(500).json({ error: "Apps Script 儲存失敗且無 Sheets API 備援: " + error.message });
-        }
-      }
-    }
-
-    // Priority 2: Direct Google Sheets API
+    // Priority 1: Direct Google Sheets API (preferred to capture the new 'important' field)
     if (sheetInitStatus.success) {
       try {
         const sheets = await getSheets();
         if (!sheets) throw new Error("Sheets instance not available");
         // Route to correct sheet
         const targetSheet = isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME;
-        const targetRange = isLeave ? LEAVES_RANGE : RANGE;
         
         // Fetch headers to ensure correct column mapping
         const headerResponse = await sheets.spreadsheets.values.get({
@@ -1088,6 +1056,21 @@ async function startServer() {
         const rawHeaders = headerResponse.data.values?.[0] || [];
         const normalizedHeaders = rawHeaders.map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
         
+        if (rawHeaders.length > 0 && !normalizedHeaders.includes('important') && !normalizedHeaders.includes('重要')) {
+          const newHeaderColIndex = rawHeaders.length;
+          const colLetter = String.fromCharCode(65 + newHeaderColIndex);
+          if (newHeaderColIndex < 26) {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: SPREADSHEET_ID,
+              range: `${targetSheet}!${colLetter}1`,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [['重要']] }
+            });
+            rawHeaders.push('重要');
+            normalizedHeaders.push('重要');
+          }
+        }
+
         // Prepare row based on headers
         const newRow = normalizedHeaders.map(header => {
           if (header === 'id') return eventId;
@@ -1122,6 +1105,35 @@ async function startServer() {
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
         var sheetsWarning = error.message;
+      }
+    }
+
+    // Priority 2: Google Apps Script (Fallback)
+    if (APPS_SCRIPT_URL) {
+      try {
+        console.log("Saving event to Apps Script...");
+        const response = await axios.post(APPS_SCRIPT_URL, {
+          ...eventData,
+          action: eventData.action || 'create',
+          id: eventId,
+          isLeave: isLeave,
+          targetSheet: isLeave ? LEAVES_SHEET_NAME : MAIN_SHEET_NAME
+        }, { timeout: 15000 });
+        
+        if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+          throw new Error("Apps Script 傳回了 HTML 而非 JSON。");
+        }
+        
+        if (response.data && response.data.error) {
+          throw new Error(response.data.error);
+        }
+        
+        clearEventsCache();
+        checkAndSendSameDayNotification(eventData, true);
+        return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
+      } catch (error: any) {
+        console.error("Apps Script Save Error:", error.message);
+        // It failed, we fall through to SQLite
       }
     }
 
@@ -1169,7 +1181,136 @@ async function startServer() {
     const { title, description, start_date, end_date, time, member_name, color, companions, original_title, is_important } = eventData;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
-    // Priority 1: Google Apps Script
+    // Priority 1: Direct Google Sheets API (preferred to capture the new 'important' field)
+    if (sheetInitStatus.success) {
+      try {
+        const sheets = await getSheets();
+        let targetSheet = MAIN_SHEET_NAME;
+        let rowIndex = -1;
+
+        // Search for the row by ID
+        const allSheets = [MAIN_SHEET_NAME, LEAVES_SHEET_NAME];
+        console.log(`Searching for ID: ${id} in sheets: ${allSheets.join(', ')}`);
+        for (const sheet of allSheets) {
+          const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheet}!A:Z`,
+          });
+          const rows = response.data.values;
+          if (rows && rows.length > 0) {
+            const headers = rows[0].map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
+            let idIndex = headers.indexOf('id');
+            let titleIndex = headers.indexOf('title');
+            
+            const possibleTitleHeaders = ['標題', '活動名稱', '名稱', 'title', 'name'];
+            const possibleStartDateHeaders = ['開始日期', '日期', 'startdate', 'date'];
+            const possibleMemberHeaders = ['成員', '人員', 'membername', 'member'];
+            
+            if (titleIndex === -1) {
+              titleIndex = headers.findIndex(h => possibleTitleHeaders.some(pt => h.includes(pt)));
+            }
+            const startDateIndex = headers.findIndex(h => possibleStartDateHeaders.some(pt => h.includes(pt)));
+            const memberIndex = headers.findIndex(h => possibleMemberHeaders.some(pt => h.includes(pt)));
+            
+            if (idIndex !== -1) {
+              const foundIndex = rows.findIndex((row, index) => index > 0 && String(row[idIndex]) === String(id));
+              if (foundIndex !== -1) {
+                targetSheet = sheet;
+                rowIndex = foundIndex + 1;
+                console.log(`Found ID ${id} in ${sheet} at row ${rowIndex}`);
+              }
+            }
+            
+            // Fallback: search by title, start_date, and member_name if ID not found
+            if (rowIndex === -1 && titleIndex !== -1) {
+              const searchTitle = original_title || title;
+              const foundIndex = rows.findIndex((row, index) => {
+                if (index === 0) return false;
+                const matchTitle = String(row[titleIndex]) === String(searchTitle);
+                const matchStartDate = startDateIndex !== -1 && start_date ? row[startDateIndex] === start_date : true;
+                const matchMember = memberIndex !== -1 && member_name ? row[memberIndex] === member_name : true;
+                return matchTitle && matchStartDate && matchMember;
+              });
+              
+              if (foundIndex !== -1) {
+                targetSheet = sheet;
+                rowIndex = foundIndex + 1;
+                console.log(`Found row by fallback in ${sheet} at row ${rowIndex}`);
+              }
+            }
+          }
+          if (rowIndex !== -1) break;
+        }
+
+        // Fallback to parsing ID if it's a row-based ID
+        if (rowIndex === -1 && typeof id === 'string' && id.includes('-')) {
+          const parts = id.split('-');
+          rowIndex = parseInt(parts.pop() || "-1");
+          targetSheet = parts.join('-');
+        }
+
+        if (rowIndex !== -1) {
+          // Fetch headers to ensure correct column mapping
+          const headerResponse = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${targetSheet}!A1:Z1`,
+          });
+          
+          const rawHeaders = headerResponse.data.values?.[0] || [];
+          const normalizedHeaders = rawHeaders.map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
+          
+          // Auto-add "重要" header if missing to support pinned events
+          if (rawHeaders.length > 0 && !normalizedHeaders.includes('important') && !normalizedHeaders.includes('重要')) {
+            const newHeaderColIndex = rawHeaders.length;
+            const colLetter = String.fromCharCode(65 + newHeaderColIndex);
+            if (newHeaderColIndex < 26) {
+              await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `${targetSheet}!${colLetter}1`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [['重要']] }
+              });
+              rawHeaders.push('重要');
+              normalizedHeaders.push('重要');
+            }
+          }
+          
+          // Prepare row based on headers
+          const updatedRow = normalizedHeaders.map(header => {
+            if (header === 'id') return id;
+            if (header === 'title') return title;
+            if (header === 'description') return description || "";
+            if (header === 'startdate') return start_date;
+            if (header === 'enddate') return end_date;
+            if (header === 'time') return time || "";
+            if (header === 'membername') return member_name;
+            if (header === 'color') return color;
+            if (header === 'companions') return companions || "";
+            if (header === 'important' || header === '重要') return is_important ? "是" : "";
+            return "";
+          });
+
+          // If mapping failed, use default order
+          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color, companions || "", is_important ? "是" : ""];
+
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${targetSheet}!A${rowIndex}:Z${rowIndex}`,
+            valueInputOption: "RAW",
+            requestBody: {
+              values: [finalRow],
+            },
+          });
+          clearEventsCache();
+          checkAndSendSameDayNotification(eventData, false);
+          return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
+        }
+      } catch (error: any) {
+        console.error("Google Sheets API Update Error:", error.message);
+      }
+    }
+
+    // Priority 2: Google Apps Script (Fallback)
     if (APPS_SCRIPT_URL) {
       try {
         let targetSheet = undefined;
@@ -1262,125 +1403,12 @@ async function startServer() {
         return res.json({ success: true, source: "google_apps_script" });
       } catch (error: any) {
         if (error.message && error.message.startsWith('NOT_FOUND:')) {
-          console.log(`ℹ️ Apps Script Update: ${error.message.replace('NOT_FOUND:', '')}. Falling back to Sheets API.`);
+          console.log(`ℹ️ Apps Script Update: ${error.message.replace('NOT_FOUND:', '')}. Falling back to SQLite.`);
           // Don't set appsScriptUpdateWarning for NOT_FOUND so we don't show a scary warning in the UI
         } else {
-          console.error("Apps Script Update Error, falling back to Sheets API:", error.message);
+          console.error("Apps Script Update Error:", error.message);
           var appsScriptUpdateWarning = error.message;
         }
-      }
-    }
-
-    // Priority 2: Direct Google Sheets API
-    if (sheetInitStatus.success) {
-      try {
-        const sheets = await getSheets();
-        let targetSheet = MAIN_SHEET_NAME;
-        let rowIndex = -1;
-
-        // Search for the row by ID
-        const allSheets = [MAIN_SHEET_NAME, LEAVES_SHEET_NAME];
-        console.log(`Searching for ID: ${id} in sheets: ${allSheets.join(', ')}`);
-        for (const sheet of allSheets) {
-          const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `${sheet}!A:Z`,
-          });
-          const rows = response.data.values;
-          if (rows && rows.length > 0) {
-            const headers = rows[0].map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
-            let idIndex = headers.indexOf('id');
-            let titleIndex = headers.indexOf('title');
-            
-            const possibleTitleHeaders = ['標題', '活動名稱', '名稱', 'title', 'name'];
-            const possibleStartDateHeaders = ['開始日期', '日期', 'startdate', 'date'];
-            const possibleMemberHeaders = ['成員', '人員', 'membername', 'member'];
-            
-            if (titleIndex === -1) {
-              titleIndex = headers.findIndex(h => possibleTitleHeaders.some(pt => h.includes(pt)));
-            }
-            const startDateIndex = headers.findIndex(h => possibleStartDateHeaders.some(pt => h.includes(pt)));
-            const memberIndex = headers.findIndex(h => possibleMemberHeaders.some(pt => h.includes(pt)));
-            
-            if (idIndex !== -1) {
-              const foundIndex = rows.findIndex((row, index) => index > 0 && String(row[idIndex]) === String(id));
-              if (foundIndex !== -1) {
-                targetSheet = sheet;
-                rowIndex = foundIndex + 1;
-                console.log(`Found ID ${id} in ${sheet} at row ${rowIndex}`);
-              }
-            }
-            
-            // Fallback: search by title, start_date, and member_name if ID not found
-            if (rowIndex === -1 && titleIndex !== -1) {
-              const searchTitle = original_title || title;
-              const foundIndex = rows.findIndex((row, index) => {
-                if (index === 0) return false;
-                const matchTitle = String(row[titleIndex]) === String(searchTitle);
-                const matchStartDate = startDateIndex !== -1 && start_date ? row[startDateIndex] === start_date : true;
-                const matchMember = memberIndex !== -1 && member_name ? row[memberIndex] === member_name : true;
-                return matchTitle && matchStartDate && matchMember;
-              });
-              
-              if (foundIndex !== -1) {
-                targetSheet = sheet;
-                rowIndex = foundIndex + 1;
-                console.log(`Found row by fallback in ${sheet} at row ${rowIndex}`);
-              }
-            }
-          }
-          if (rowIndex !== -1) break;
-        }
-
-        // Fallback to parsing ID if it's a row-based ID
-        if (rowIndex === -1 && typeof id === 'string' && id.includes('-')) {
-          const parts = id.split('-');
-          rowIndex = parseInt(parts.pop() || "-1");
-          targetSheet = parts.join('-');
-        }
-
-        if (rowIndex !== -1) {
-          // Fetch headers to ensure correct column mapping
-          const headerResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `${targetSheet}!A1:Z1`,
-          });
-          
-          const rawHeaders = headerResponse.data.values?.[0] || [];
-          const normalizedHeaders = rawHeaders.map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
-          
-          // Prepare row based on headers
-          const updatedRow = normalizedHeaders.map(header => {
-            if (header === 'id') return id;
-            if (header === 'title') return title;
-            if (header === 'description') return description || "";
-            if (header === 'startdate') return start_date;
-            if (header === 'enddate') return end_date;
-            if (header === 'time') return time || "";
-            if (header === 'membername') return member_name;
-            if (header === 'color') return color;
-            if (header === 'companions') return companions || "";
-            if (header === 'important' || header === '重要') return is_important ? "是" : "";
-            return "";
-          });
-
-          // If mapping failed, use default order
-          const finalRow = updatedRow.length > 0 ? updatedRow : [id, title, description, start_date, end_date, time || "", member_name, color, companions || "", is_important ? "是" : ""];
-
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `${targetSheet}!A${rowIndex}:Z${rowIndex}`,
-            valueInputOption: "RAW",
-            requestBody: {
-              values: [finalRow],
-            },
-          });
-          clearEventsCache();
-          checkAndSendSameDayNotification(eventData, false);
-          return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
-        }
-      } catch (error: any) {
-        console.error("Google Sheets API Update Error:", error.message);
       }
     }
 

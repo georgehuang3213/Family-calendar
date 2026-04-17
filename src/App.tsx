@@ -51,7 +51,8 @@ import {
   Snowflake,
   Wind,
   Thermometer,
-  MapPin
+  MapPin,
+  Megaphone
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -1033,6 +1034,19 @@ export default function App() {
     return 0;
   }).slice(0, 10);
 
+  // 篩選出今天及之後的重要公告
+  const todayForImportant = new Date();
+  todayForImportant.setHours(0, 0, 0, 0);
+
+  const upcomingImportantEvents = events.filter(event => {
+    if (!event.is_important) return false;
+    let endDate = new Date(event.end_date || event.start_date);
+    endDate.setHours(23, 59, 59, 999);
+    return endDate >= todayForImportant;
+  }).sort((a, b) => {
+    return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+  });
+
   return (
     <div className={cn(
       "min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans pb-24 md:pb-0 transition-colors duration-300",
@@ -1438,6 +1452,30 @@ export default function App() {
             </div>
           </div>
         </div>
+
+      {upcomingImportantEvents.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 pb-2">
+          <div className="bg-amber-50 dark:bg-amber-900/40 border-2 border-amber-200 dark:border-amber-700/50 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black mb-3 text-sm tracking-widest">
+              <Megaphone size={18} />
+              <span>置頂重要公告</span>
+            </div>
+            <div className="space-y-3">
+              {upcomingImportantEvents.map((evt) => (
+                <div key={evt.id} className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 bg-white dark:bg-stone-800 p-3 rounded-lg border border-amber-100 dark:border-amber-900/40 shadow-sm transition-all hover:shadow-md">
+                  <span className="text-amber-600 dark:text-amber-500 font-bold min-w-[80px] text-sm flex items-center gap-1">
+                    <Star size={14} className="fill-amber-500" />
+                    {format(safeParseISO(evt.start_date), 'MM/dd')} 
+                  </span>
+                  <span className="font-extrabold text-stone-800 dark:text-stone-100 text-lg">{evt.title}</span>
+                  {evt.time && <span className="text-xs font-bold text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full outline outline-1 outline-stone-200 dark:outline-stone-600 self-start md:self-auto">{evt.time}</span>}
+                  <span className="text-xs font-bold text-amber-700/80 dark:text-amber-400/80 mt-1 md:mt-0">{evt.member_name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
         {error && (
           <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 flex flex-col gap-3">
