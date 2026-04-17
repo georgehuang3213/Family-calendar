@@ -378,6 +378,43 @@ async function startServer() {
         return lineClient.replyMessage(event.replyToken, { type: 'text', text: `您的 ID 是：\n${id}` });
       }
 
+      // 指令 4: 重要行程 (先判斷重要行程，避免被下方的「人名+行程」誤認)
+      if (text === '重要行程' || text === '重要' || text === '重要事項') {
+        try {
+          const database = getDb();
+          if (!database) {
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '抱歉，資料庫連線中，請稍後再試。' });
+          }
+          
+          const nowStr = new Date().toISOString().split('T')[0];
+          const snapshot = await database.collection('events').get();
+          const allEvents = snapshot.docs.map((doc: any) => doc.data());
+          
+          // 篩選未來的重要行程
+          let filtered = allEvents.filter((e: any) => e.is_important === true && (e.end_date || e.start_date) >= nowStr);
+          
+          // 排序
+          filtered.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
+
+          if (filtered.length === 0) {
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '🔔 目前沒有標記為重要的未來行程喔！' });
+          }
+
+          let msg = `🌟 置頂重要行程公告：\n\n`;
+          filtered.forEach((e: any, index: number) => {
+            msg += `${index + 1}. [${e.start_date.slice(5)}] ${e.title}\n`;
+            if (e.member_name) msg += `   👤 負責：${e.member_name}\n`;
+            if (e.description) msg += `   📝 備註：${e.description}\n`;
+            msg += '\n';
+          });
+          
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg.trim() });
+        } catch (dbErr) {
+          console.error("❌ Database query failed in LINE event:", dbErr);
+          return lineClient.replyMessage(event.replyToken, { type: 'text', text: '讀取重要行程時發生錯誤。' });
+        }
+      }
+
       // 指令 2: 行程查詢系列
       if (text === '今天行程' || text === '今日行程' || text === '當日行程' || text === '明天行程' || text === '明日行程' || text === '近期行程' || text === '本週行程' || text.endsWith('行程')) {
         try {
@@ -402,8 +439,11 @@ async function startServer() {
           }
 
           // 判斷人名 (例如: 小明行程)
-          if (text.endsWith('行程') && !['今天','今日','當日','明天','明日','近期','本週'].some(k => text.startsWith(k))) {
+          if (text.endsWith('行程') && !['今天','今日','當日','明天','明日','近期','本週','重要'].some(k => text.startsWith(k))) {
             filterMember = text.replace('行程', '');
+            // 針對特定成員查詢，預設顯示近 7 天
+            isRange = true;
+            rangeDays = 7;
           }
 
           const formatDate = (d: Date) => d.toISOString().split('T')[0];
@@ -480,43 +520,6 @@ async function startServer() {
         return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg });
       }
 
-      // 指令 4: 重要行程
-      if (text === '重要行程' || text === '重要' || text === '重要事項') {
-        try {
-          const database = getDb();
-          if (!database) {
-            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '抱歉，資料庫連線中，請稍後再試。' });
-          }
-          
-          const nowStr = new Date().toISOString().split('T')[0];
-          const snapshot = await database.collection('events').get();
-          const allEvents = snapshot.docs.map((doc: any) => doc.data());
-          
-          // 篩選未來的重要行程
-          let filtered = allEvents.filter((e: any) => e.is_important === true && (e.end_date || e.start_date) >= nowStr);
-          
-          // 排序
-          filtered.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
-
-          if (filtered.length === 0) {
-            return lineClient.replyMessage(event.replyToken, { type: 'text', text: '🔔 目前沒有標記為重要的未來行程喔！' });
-          }
-
-          let msg = `🌟 置頂重要行程公告：\n\n`;
-          filtered.forEach((e: any, index: number) => {
-            msg += `${index + 1}. [${e.start_date.slice(5)}] ${e.title}\n`;
-            if (e.member_name) msg += `   👤 負責：${e.member_name}\n`;
-            if (e.description) msg += `   📝 備註：${e.description}\n`;
-            msg += '\n';
-          });
-          
-          return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg.trim() });
-        } catch (dbErr) {
-          console.error("❌ Database query failed in LINE event:", dbErr);
-          return lineClient.replyMessage(event.replyToken, { type: 'text', text: '讀取重要行程時發生錯誤。' });
-        }
-      }
-      
       // 指令 5: 指令說明
       if (text === '幫助' || text === '說明' || text === 'help') {
         return lineClient.replyMessage(event.replyToken, { 
