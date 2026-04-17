@@ -412,9 +412,14 @@ async function startServer() {
           endDate.setDate(endDate.getDate() + (rangeDays - 1));
           const endDateStr = formatDate(endDate);
 
+          // 獲取所有重要行程 (未過期的)
+          const nowStr = new Date().toISOString().split('T')[0];
           const snapshot = await database.collection('events').get();
           const allEvents = snapshot.docs.map((doc: any) => doc.data());
           
+          const importantEvents = allEvents.filter((e: any) => e.is_important === true && (e.end_date || e.start_date) >= nowStr)
+                                         .sort((a: any, b: any) => a.start_date.localeCompare(b.start_date));
+
           let filtered = allEvents.filter((e: any) => {
             const evStart = e.start_date;
             const evEnd = e.end_date || evStart;
@@ -430,18 +435,34 @@ async function startServer() {
           // 排序
           filtered.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date) || (a.time || "").localeCompare(b.time || ""));
 
-          if (filtered.length === 0) {
+          if (filtered.length === 0 && importantEvents.length === 0) {
             let emptyMsg = `📅 ${isRange ? startDateStr + ' ~ ' + endDateStr : startDateStr}\n`;
             emptyMsg += filterMember ? `找不到 ${filterMember} 的行程喔！` : `沒有排定的行程喔！✨`;
             return lineClient.replyMessage(event.replyToken, { type: 'text', text: emptyMsg });
           }
 
-          let msg = `📅 ${isRange ? '本週' : (text.includes('明天') ? '明天' : '今日')}行程摘要${filterMember ? '(' + filterMember + ')' : ''}：\n\n`;
-          filtered.forEach((e: any, index: number) => {
-            msg += `${index + 1}. ${isRange ? '[' + e.start_date.slice(5) + '] ' : ''}[${e.member_name}] ${e.title}`;
-            if (e.time) msg += ` (${e.time})`;
-            msg += '\n';
-          });
+          let msg = "";
+          
+          // 如果有重要行程且不是在查特定人
+          if (importantEvents.length > 0 && !filterMember) {
+            msg += `🌟 【置頂重要公告】\n`;
+            importantEvents.forEach((e: any) => {
+              msg += `📍 [${e.start_date.slice(5)}] ${e.title}${e.time ? ' (' + e.time + ')' : ''}\n`;
+            });
+            msg += `──────────────\n`;
+          }
+
+          msg += `📅 ${isRange ? '本週' : (text.includes('明天') ? '明天' : '今日')}行程摘要${filterMember ? '(' + filterMember + ')' : ''}：\n\n`;
+          
+          if (filtered.length > 0) {
+            filtered.forEach((e: any, index: number) => {
+              msg += `${index + 1}. ${isRange ? '[' + e.start_date.slice(5) + '] ' : ''}[${e.member_name}] ${e.title}`;
+              if (e.time) msg += ` (${e.time})`;
+              msg += '\n';
+            });
+          } else {
+            msg += `(此時段暫無一般行程)\n`;
+          }
           
           return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg.trim() });
         } catch (dbErr) {
