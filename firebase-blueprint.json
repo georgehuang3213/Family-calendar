@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Event",
+      "description": "An event on the family calendar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uuid": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "start_date": { "type": "string", "format": "date" },
+        "end_date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "member_name": { "type": "string" },
+        "color": { "type": "string" },
+        "is_important": { "type": "boolean" },
+        "companions": { "type": "string" }
+      },
+      "required": ["id", "title", "start_date"]
+    }
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": { "$ref": "Event" },
+      "description": "Family calendar events"
+    }
+  }
+}
