@@ -481,29 +481,84 @@ export default function App() {
     companions: '',
   });
 
+import { 
+  collection, 
+  onSnapshot, 
+  query
+} from 'firebase/firestore';                
+import { db } from './firebase';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: any;
+}
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {},
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
   useEffect(() => {
-    fetchEvents();
-    fetchConfigStatus();
+    // 1. Fetch static resources (Weather, Holidays)
     fetchWeather();
     fetchHolidays(2026);
+    fetchConfigStatus();
 
-    // Poll for new events every 3 minutes to keep sync without overloading
-    const intervalId = setInterval(() => {
-      fetchEvents(false);
-    }, 180000);
+    // 2. Set up real-time listener for events
+    const q = query(collection(db, 'events'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dbEvents: Event[] = snapshot.docs.map(doc => ({
+        ...doc.data() as Event,
+        id: doc.id
+      }));
 
-    // Fetch immediately when user switches back to this tab
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchEvents(false);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+      // Reuse the processing logic
+      const now = Date.now();
+      const LOCK_TTL = 300000;
+      
+      const processedEvents = dbEvents.map((event: Event) => {
+        let is_important = !!event.is_important;
+        const idStr = String(event.id);
+        const uuidStr = (event as any).uuid ? String((event as any).uuid) : '';
+        const signature = `${event.title}|${event.start_date}|${event.member_name}`.toLowerCase().trim();
+        
+        const lock = importanceLocker.current.get(idStr) || 
+                     (uuidStr ? importanceLocker.current.get(uuidStr) : null) ||
+                     importanceLocker.current.get(signature);
 
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+        if (lock && (now - lock.timestamp < LOCK_TTL)) {
+          is_important = lock.is_important;
+        }
+
+        return { ...event, id: idStr, is_important };
+      });
+      
+      setEvents(processedEvents);
+      setStorageSource('cloud');
+      setLoading(false);
+      setError(null);
+    }, (error) => {
+        // Use the required error handler
+        handleFirestoreError(error, OperationType.LIST, 'events');
+        setError('無法取得雲端活動資料');
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const fetchWeather = async () => {
@@ -1083,14 +1138,20 @@ export default function App() {
   const todayForImportant = new Date();
   todayForImportant.setHours(0, 0, 0, 0);
 
-  const upcomingImportantEvents = events.filter(event => {
-    if (!event.is_important) return false;
-    let endDate = new Date(event.end_date || event.start_date);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate >= todayForImportant;
-  }).sort((a, b) => {
-    return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
-  });
+  const upcomingImportantEvents = useMemo(() => {
+    const filtered = events.filter(event => {
+      if (!event.is_important) return false;
+      let endDate = new Date(event.end_date || event.start_date);
+      endDate.setHours(23, 59, 59, 999);
+      return endDate >= todayForImportant;
+    }).sort((a, b) => {
+      return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+    });
+    
+    console.log("DEBUG: All events count:", events.length);
+    console.log("DEBUG: Important events calculated:", filtered.length, filtered);
+    return filtered;
+  }, [events]);
 
   return (
     <div className={cn(
