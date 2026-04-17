@@ -5,8 +5,50 @@ import dotenv from "dotenv";
 import axios from "axios";
 import { v4 as uuidv4 } from 'uuid';
 import { middleware, Client, WebhookEvent } from '@line/bot-sdk';
+import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import fs from "fs";
 
 dotenv.config();
+
+let db: any;
+function getDb() {
+  if (!db) {
+    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (serviceAccountKey) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountKey);
+        
+        // Try to get database ID from config file
+        let databaseId = "(default)";
+        try {
+          const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+          if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.firestoreDatabaseId) {
+              databaseId = config.firestoreDatabaseId;
+              console.log(`📡 Using Firestore Database ID: ${databaseId}`);
+            }
+          }
+        } catch (e) {
+          console.warn("⚠️ Could not read firebase-applet-config.json for database ID, defaulting to (default)");
+        }
+
+        if (getApps().length === 0) {
+          initializeApp({
+            credential: cert(serviceAccount)
+          });
+        }
+        db = getFirestore(databaseId);
+      } catch (e) {
+        console.error("❌ Failed to initialize Firebase Admin:", e);
+      }
+    } else {
+      console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT_KEY is missing, Firestore features will be disabled.");
+    }
+  }
+  return db;
+}
 
 let db_local: any = null;
 
@@ -128,6 +170,18 @@ function clearEventsCache() {
 let fetchEventsPromise: Promise<any> | null = null;
 
 async function fetchEventsInternal() {
+  try {
+    const database = getDb();
+    if (database) {
+      const eventsSnapshot = await database.collection('events').get();
+      const events = eventsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+      console.log(`✅ Fetched ${events.length} events from Firestore`);
+      return { events, source: 'firestore' };
+    }
+  } catch (error: any) {
+    console.error("❌ Firestore fetch error, falling back to existing logic:", error);
+  }
+  
   if (fetchEventsPromise) {
     console.log("⏳ Joining existing fetch request to prevent stampede...");
     return fetchEventsPromise;
@@ -816,6 +870,100 @@ async function startServer() {
     return Promise.resolve(null);
   }
 
+  // Data Migration Endpoint: Google Sheets -> Firestore
+  app.post("/api/admin/migrate-to-firestore", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) {
+        return res.status(500).json({ error: "Firebase 未正確初始化" });
+      }
+
+      console.log("🚀 Starting data migration from Google Sheets to Firestore...");
+      
+      // Initialize sheets if needed
+      await initializeSheet();
+      const sheets = await getSheets();
+      if (!sheets) throw new Error("無法取得 Google Sheets API");
+
+      let totalMigrated = 0;
+      const allSheets = [MAIN_SHEET_NAME, LEAVES_SHEET_NAME];
+      const batchSize = 50;
+      let batch = database.batch();
+      let operationCount = 0;
+
+      for (const sheetName of allSheets) {
+        try {
+          const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheetName}!A:Z`,
+          });
+          const rows = response.data.values;
+          if (!rows || rows.length < 2) continue;
+
+          const rawHeaders = rows[0];
+          const headers = rawHeaders.map((h: any) => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
+          
+          // Row indices for mapping
+          const idIdx = headers.indexOf('id');
+          const titleIdx = headers.indexOf('title');
+          const descIdx = headers.indexOf('description');
+          const startIdx = headers.indexOf('startdate');
+          const endIdx = headers.indexOf('enddate');
+          const timeIdx = headers.indexOf('time');
+          const memberIdx = headers.indexOf('membername');
+          const colorIdx = headers.indexOf('color');
+          const companionsIdx = headers.indexOf('companions');
+          const importantIdx = headers.includes('important') ? headers.indexOf('important') : headers.indexOf('重要');
+
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row[titleIdx]) continue; // Skip empty rows
+
+            const eventId = row[idIdx] || uuidv4();
+            const eventData = {
+              id: eventId,
+              title: row[titleIdx] || "",
+              description: descIdx !== -1 ? row[descIdx] || "" : "",
+              start_date: startIdx !== -1 ? row[startIdx] || "" : "",
+              end_date: endIdx !== -1 ? row[endIdx] || "" : "",
+              time: timeIdx !== -1 ? row[timeIdx] || "" : "",
+              member_name: memberIdx !== -1 ? row[memberIdx] || "" : "",
+              color: colorIdx !== -1 ? row[colorIdx] || "" : "",
+              companions: companionsIdx !== -1 ? row[companionsIdx] || "" : "",
+              is_important: importantIdx !== -1 ? (row[importantIdx] === '是' || row[importantIdx] === 'true' || row[importantIdx] === '1') : false,
+              migratedFrom: sheetName,
+              migratedAt: new Date().toISOString()
+            };
+
+            const docRef = database.collection('events').doc(eventId);
+            batch.set(docRef, eventData, { merge: true });
+            
+            operationCount++;
+            totalMigrated++;
+
+            if (operationCount >= batchSize) {
+              await batch.commit();
+              batch = database.batch();
+              operationCount = 0;
+            }
+          }
+        } catch (e: any) {
+          console.error(`Error migrating sheet ${sheetName}:`, e.message);
+        }
+      }
+
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(`✅ Migration completed. Total events migrated: ${totalMigrated}`);
+      res.json({ success: true, totalMigrated, message: "資料搬遷完成" });
+    } catch (error: any) {
+      console.error("Migration Critical Error:", error);
+      res.status(500).json({ error: "搬遷失敗", details: error.message });
+    }
+  });
+
   // Taiwan Government Calendar API
   app.get("/api/taiwan-calendar", async (req, res) => {
     const year = req.query.year || new Date().getFullYear();
@@ -1044,10 +1192,44 @@ async function startServer() {
 
   app.get("/api/cron/daily-push", async (req, res) => {
     try {
-      await initializeSheet();
-      const result = await fetchEventsInternal();
+      const database = getDb();
+      if (!database) {
+        throw new Error("Firestore database not initialized");
+      }
+
+      // Fetch events from Firestore
+      const snapshot = await database.collection('events').get();
+      const todaysEvents = snapshot.docs
+        .map((doc: any) => ({ id: doc.id, ...doc.data() }))
+        .filter((e: any) => {
+          const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+          const yyyy = today.getFullYear();
+          const mm = String(today.getMonth() + 1).padStart(2, '0');
+          const dd = String(today.getDate()).padStart(2, '0');
+          const todayStr = `${yyyy}-${mm}-${dd}`;
+          
+          const parseDateStr = (dStr: string) => {
+            if (!dStr) return 0;
+            const s = dStr.trim();
+            const d = new Date(s);
+            if (!isNaN(d.getTime())) {
+                const taipeiStr = d.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+                const taipeiDate = new Date(taipeiStr);
+                return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
+            }
+            return 0;
+          };
+
+          const startTime = parseDateStr(e.start_date);
+          const endTime = e.end_date ? parseDateStr(e.end_date) : startTime;
+          const todayTime = new Date(yyyy, today.getMonth(), today.getDate()).getTime();
+          
+          if (startTime > 0 && endTime > 0) {
+            return todayTime >= startTime && todayTime <= endTime;
+          }
+          return false;
+        });
       
-      // Get today's date in YYYY-MM-DD format (Taiwan time)
       const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -1058,43 +1240,6 @@ async function startServer() {
         getTodayWeather(),
         getTodayHoliday(yyyy, todayStr)
       ]);
-
-      // Filter events that happen today
-      const todayTime = new Date(yyyy, today.getMonth(), today.getDate()).getTime();
-      
-      const parseDateStr = (dStr: string) => {
-        if (!dStr) return 0;
-        const s = dStr.trim();
-        if (s.includes('T')) {
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) {
-            const taipeiStr = d.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
-            const taipeiDate = new Date(taipeiStr);
-            return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
-          }
-        }
-        const parts = s.split(/[-/]/);
-        if (parts.length === 3 && parts[0].length === 4) {
-          return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
-        }
-        const fallback = new Date(s);
-        if (!isNaN(fallback.getTime())) {
-           const taipeiStr = fallback.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
-           const taipeiDate = new Date(taipeiStr);
-           return new Date(taipeiDate.getFullYear(), taipeiDate.getMonth(), taipeiDate.getDate()).getTime();
-        }
-        return 0;
-      };
-
-      const todaysEvents = result.events.filter((e: any) => {
-        const startTime = parseDateStr(e.start_date);
-        const endTime = e.end_date ? parseDateStr(e.end_date) : startTime;
-        
-        if (startTime > 0 && endTime > 0) {
-          return todayTime >= startTime && todayTime <= endTime;
-        }
-        return false;
-      });
 
       if (todaysEvents.length === 0 && !holidayStr) {
         console.log("📅 No events and no holiday today. Skipping LINE push.");
@@ -1265,7 +1410,24 @@ async function startServer() {
     const leaveKeywords = ['請假', '排休', '特休', '補休', '公休', '休假'];
     const isLeave = leaveKeywords.some(kw => title.includes(kw));
 
-    // Priority 1: Direct Google Sheets API (preferred to capture the new 'important' field)
+    // New: Save to Firestore
+    let firestoreSuccess = false;
+    try {
+      const database = getDb();
+      if (database) {
+        await database.collection('events').doc(eventId).set({
+          ...eventData,
+          id: eventId,
+          createdAt: new Date().toISOString()
+        });
+        console.log(`✅ Saved event ${eventId} to Firestore`);
+        firestoreSuccess = true;
+      }
+    } catch (error: any) {
+      console.error("❌ Firestore Save Error:", error.message);
+    }
+
+    // Priority 1: Direct Google Sheets API
     if (sheetInitStatus.success) {
       try {
         const sheets = await getSheets();
@@ -1398,6 +1560,16 @@ async function startServer() {
           id: eventId,
           event: { ...eventData, id: eventId, is_important: !!is_important }
         });
+      } else if (firestoreSuccess) {
+        // If SQLite is missing but Firestore succeeded
+        clearEventsCache();
+        checkAndSendSameDayNotification(eventData, true);
+        return res.json({ 
+          success: true,
+          source: "firestore",
+          id: eventId,
+          event: { ...eventData, id: eventId, is_important: !!is_important }
+        });
       } else {
         return res.status(500).json({ 
           error: "儲存失敗：Google 試算表未設定且本地資料庫不可用。",
@@ -1427,7 +1599,24 @@ async function startServer() {
     const { title, description, start_date, end_date, time, member_name, color, companions, original_title, is_important } = eventData;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
-    // Priority 1: Direct Google Sheets API (preferred to capture the new 'important' field)
+    // New: Update in Firestore
+    let firestoreSuccess = false;
+    try {
+      const database = getDb();
+      if (database) {
+        await database.collection('events').doc(id).set({
+          ...eventData,
+          id: id,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        console.log(`✅ Updated event ${id} in Firestore`);
+        firestoreSuccess = true;
+      }
+    } catch (error: any) {
+      console.error("❌ Firestore Update Error:", error.message);
+    }
+
+    // Priority 1: Direct Google Sheets API
     if (sheetInitStatus.success) {
       try {
         const sheets = await getSheets();
@@ -1691,6 +1880,16 @@ async function startServer() {
             warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined,
             event: { ...eventData, id, is_important: !!is_important }
           });
+        } else if (firestoreSuccess) {
+          clearEventsCache();
+          updateWriteBuffer(id, { ...eventData, is_important: !!is_important });
+          checkAndSendSameDayNotification(eventData, false);
+          res.json({ 
+            success: true, 
+            source: "firestore", 
+            warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined,
+            event: { ...eventData, id, is_important: !!is_important }
+          });
         } else {
           console.log(`DEBUG: Event ID ${id} NOT found in SQLite update fallback.`);
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
@@ -1722,8 +1921,21 @@ async function startServer() {
     const { title } = req.query;
     const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
     console.log(`[DELETE] Request received for id: ${id}, title: ${title}`);
-    const results: any = { sqlite: null, gas: null, sheets: null };
+    const results: any = { sqlite: null, gas: null, sheets: null, firestore: null };
     let eventDetails: any = null;
+
+    // 0. Try Firestore deletion first
+    try {
+      const database = getDb();
+      if (database) {
+        await database.collection('events').doc(id).delete();
+        console.log(`✅ Deleted event ${id} from Firestore`);
+        results.firestore = { success: true };
+      }
+    } catch (error: any) {
+      console.error("❌ Firestore Delete Error:", error.message);
+      results.firestore = { success: false, error: error.message };
+    }
 
     // 1. Try to find event details first
     // Try SQLite
@@ -2033,30 +2245,33 @@ async function startServer() {
     // Check if both failed
     const gasFailed = APPS_SCRIPT_URL && results.gas?.success === false;
     const sheetsFailed = SPREADSHEET_ID && (results.sheets?.success === false || (!sheetInitStatus.success && !results.sheets));
+    const firestoreFailed = results.firestore?.success === false;
     
-    // If it was successfully deleted from SQLite, we consider it a success even if Google Sheets failed
-    // (This happens for local-only events)
-    if (results.sqlite?.success) {
+    // If it was successfully deleted from Firestore or SQLite, we consider it a success
+    if (results.firestore?.success || results.sqlite?.success) {
       clearEventsCache();
       
-      // If the error was just "not found", don't show a warning as it's expected for local-only events
       const isJustNotFound = (results.gas?.error && results.gas.error.includes('找不到 ID')) || 
-                             (results.sheets?.error && results.sheets.error.includes('找不到'));
+                             (results.sheets?.error && (results.sheets.error.includes('找不到') || results.sheets.error.includes('未初始化')));
                              
       const shouldWarn = (gasFailed || sheetsFailed) && !isJustNotFound;
       
-      return res.json({ success: true, results, warning: shouldWarn ? "已從本地刪除，但 Google 試算表同步失敗" : undefined });
+      return res.json({ 
+        success: true, 
+        results, 
+        warning: shouldWarn ? "已從主資料庫刪除，但 Google 試算表同步異常" : undefined 
+      });
     }
     
-    if (gasFailed && sheetsFailed) {
-      return res.status(500).json({ error: `刪除失敗: Apps Script (${results.gas?.error}), Sheets API (${results.sheets?.error || '未初始化'})` });
-    } else if (gasFailed && !SPREADSHEET_ID) {
-      return res.status(500).json({ error: `Apps Script 刪除失敗: ${results.gas?.error}` });
-    } else if (sheetsFailed && !APPS_SCRIPT_URL) {
-      return res.status(500).json({ error: `Google Sheets API 刪除失敗: ${results.sheets?.error || '未初始化'}` });
-    } else if (gasFailed && !sheetInitStatus.success) {
-      return res.status(500).json({ error: `Apps Script 刪除失敗且無 Sheets API 備援: ${results.gas?.error}` });
-    }
+    // Construct detailed error message
+    let errorMessage = "刪除失敗：";
+    if (firestoreFailed) errorMessage += `Firestore (${results.firestore.error}), `;
+    else if (!results.firestore) errorMessage += `Firestore (未初始化), `;
+    
+    if (gasFailed) errorMessage += `Apps Script (${results.gas.error}), `;
+    if (sheetsFailed) errorMessage += `Sheets API (${results.sheets?.error || '未初始化'})`;
+    
+    return res.status(500).json({ error: errorMessage.replace(/, $/, ""), results });
 
     if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
       clearEventsCache();

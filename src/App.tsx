@@ -211,6 +211,9 @@ const getEventIcon = (title: string | undefined | null, size: number = 10) => {
   return null;
 };
 
+import { onSnapshot, collection, query, orderBy } from 'firebase/firestore';
+import { db } from './firebase';
+
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
@@ -236,6 +239,7 @@ export default function App() {
   const [quickSelectType, setQuickSelectType] = useState<'leave' | 'work'>('leave');
   const pendingQuickLeaves = useRef<Set<string>>(new Set());
   const pendingQuickWorks = useRef<Set<string>>(new Set());
+  const [isMigrating, setIsMigrating] = useState(false);
   const [isElderlyMode, setIsElderlyMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('elderlyMode') === 'true';
@@ -270,6 +274,27 @@ export default function App() {
       localStorage.setItem('elderlyMode', 'false');
     }
   }, [isElderlyMode]);
+
+  const handleMigrate = async () => {
+    if (!window.confirm('確定要將所有 Google Sheets 資料搬遷至 Firestore 嗎？這將會完整同步現有資料，並將 Firestore 作為未來的主要資料庫。')) return;
+    
+    setIsMigrating(true);
+    try {
+      const res = await fetch('/api/admin/migrate-to-firestore', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setToast({ message: `資料搬遷完成！共成功同步 ${data.totalMigrated} 筆行程。`, type: 'success' });
+        // Refresh events
+        window.location.reload();
+      } else {
+        throw new Error(data.error || '搬遷時發生錯誤');
+      }
+    } catch (err: any) {
+      setToast({ message: `搬遷失敗：${err.message}`, type: 'error' });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent, eventId: string | number) => {
     e.dataTransfer.setData('eventId', String(eventId));
@@ -679,65 +704,65 @@ export default function App() {
   const importanceLocker = useRef<Map<string, { is_important: boolean, timestamp: number }>>(new Map());
 
   const fetchEvents = async (showLoading = true) => {
+    // We now use real-time listeners for data, but keep this for metadata/config
     try {
       if (showLoading) setLoading(true);
-      const res = await fetch('/api/events');
-      
-      const contentType = res.headers.get("content-type");
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error(`伺服器傳回非 JSON 回應: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
+      const res = await fetch('/api/config-status');
+      if (res.ok) {
+        const data = await res.json();
+        setConfigStatus(data);
       }
+    } catch (e) {
+      console.error("Config fetch error:", e);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
 
-      if (!res.ok) {
-        throw new Error(data.error || '無法取得活動資料');
-      }
-      
+  useEffect(() => {
+    setLoading(true);
+    // Real-time listener for events in Firestore
+    const q = query(collection(db, 'events'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const now = Date.now();
-      const LOCK_TTL = 300000; // 5 minutes sticky lock
+      const LOCK_TTL = 300000;
       
-      // 確保所有 ID 都轉換為字串，且 is_important 為布林值
-      const processedEvents = (data.events || []).map((event: Event) => {
-        let is_important = !!event.is_important;
-        const idStr = String(event.id);
-        const uuidStr = (event as any).uuid ? String((event as any).uuid) : '';
-        const signature = `${event.title}|${event.start_date}|${event.member_name}`.toLowerCase().trim();
+      const firestoreEvents = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let is_important = !!data.is_important;
+        const idStr = doc.id;
+        const uuidStr = data.uuid ? String(data.uuid) : '';
+        const signature = `${data.title}|${data.start_date}|${data.member_name}`.toLowerCase().trim();
         
-        // Apply sticky lock if exists
         const lock = importanceLocker.current.get(idStr) || 
                      (uuidStr ? importanceLocker.current.get(uuidStr) : null) ||
                      importanceLocker.current.get(signature);
 
         if (lock && (now - lock.timestamp < LOCK_TTL)) {
           if (is_important !== lock.is_important) {
-            console.log(`📡 Sticky lock applied for ${event.title}: forcing ${lock.is_important}`);
             is_important = lock.is_important;
           }
         }
 
         return {
-          ...event,
           id: idStr,
+          ...data,
           is_important
-        };
+        } as Event;
       });
       
-      setEvents(processedEvents);
-      setStorageSource(data.source || 'local');
-      setWarning(data.warning || null);
+      setEvents(firestoreEvents);
+      setStorageSource('firestore');
+      setLoading(false);
       setError(null);
-    } catch (err: any) {
-      setError(err.message);
-      // 如果發生錯誤，自動顯示除錯資訊以便使用者排查
-      setShowDebug(true);
-      fetchConfigStatus();
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error("Firestore real-time error:", err);
+      setError("無法即時取得資料，請檢查網路連線或 Firebase 設定。");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleEditClick = (event: Event) => {
     setEditingEventId(event.id);
@@ -1229,6 +1254,25 @@ export default function App() {
             title="長輩友善模式"
           >
             長輩模式
+          </button>
+
+          {/* Hidden Admin Button for Migration (Alt+Click to see or just Dev use) */}
+          <button 
+            onClick={(e) => {
+              if (e.altKey || window.confirm('啟動資料全量搬遷 (Sheets -> Firestore)？')) {
+                handleMigrate();
+              }
+            }}
+            disabled={isMigrating}
+            className={cn(
+              "flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm border",
+              isMigrating 
+                ? "bg-stone-100 text-stone-400 border-stone-200 animate-pulse" 
+                : "bg-white dark:bg-stone-800 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800 hover:border-indigo-300 hover:text-indigo-500"
+            )}
+            title="搬遷資料至 Firebase"
+          >
+            {isMigrating ? '搬遷中...' : '資料同步'}
           </button>
           
           <button 
