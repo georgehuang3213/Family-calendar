@@ -954,6 +954,8 @@ export default function App() {
       try {
         const date = new Date(s);
         if (!isNaN(date.getTime())) {
+          // Discard weird dummy dates from spreadsheet (e.g. 1899-12-30)
+          if (date.getFullYear() < 1920) return '';
           return format(date, 'HH:mm');
         }
       } catch (e) {}
@@ -1192,6 +1194,73 @@ export default function App() {
       </header>
 
       <main className="p-4 md:p-6 max-w-7xl mx-auto">
+        {/* 重要公告 - 置頂最上方，確保所有模式都能看到 */}
+        {upcomingImportantEvents.length > 0 && (
+          <div className="mb-6">
+            <div className={cn(
+              "bg-amber-50/50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/30 rounded-xl shadow-sm overflow-hidden",
+              isElderlyMode ? "p-5 md:p-6" : "p-3 md:p-4"
+            )}>
+              <div className="flex items-center justify-between mb-3 md:mb-4">
+                <div className={cn(
+                  "flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-[0.2em] uppercase",
+                  isElderlyMode ? "text-xl" : "text-[10px] md:text-xs"
+                )}>
+                  <Megaphone size={isElderlyMode ? 28 : 14} />
+                  <span>置頂重要公告</span>
+                </div>
+                <span className={cn(
+                  "font-bold text-amber-600/60 dark:text-amber-500/40 bg-amber-100/50 dark:bg-amber-900/40 rounded-full",
+                  isElderlyMode ? "px-4 py-1 text-lg" : "px-2 py-0.5 text-[10px]"
+                )}>
+                  {upcomingImportantEvents.length} 則
+                </span>
+              </div>
+              <div className={cn(
+                "grid gap-3",
+                isElderlyMode ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                upcomingImportantEvents.length > 4 && "max-h-[320px] md:max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"
+              )}>
+                {upcomingImportantEvents.map((evt) => (
+                  <div key={evt.id} className={cn(
+                    "flex flex-col bg-white/80 dark:bg-stone-800/80 backdrop-blur-sm rounded-xl border border-amber-100/50 dark:border-amber-900/30 shadow-sm transition-all hover:shadow-md group",
+                    isElderlyMode ? "p-6" : "p-3"
+                  )}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={cn(
+                        "text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1.5",
+                        isElderlyMode ? "text-xl" : "text-[10px]"
+                      )}>
+                        <Star size={isElderlyMode ? 22 : 12} className="fill-amber-500" />
+                        {format(safeParseISO(evt.start_date), 'MM/dd')} 
+                      </span>
+                      <span className={cn(
+                        "font-bold text-stone-400 dark:text-stone-500 group-hover:text-amber-600 transition-colors bg-stone-100 dark:bg-stone-900/50 px-2 py-0.5 rounded-lg",
+                        isElderlyMode ? "text-xl" : "text-[10px]"
+                      )}>
+                        {evt.member_name}
+                      </span>
+                    </div>
+                    <div className={cn(
+                      "font-black text-stone-800 dark:text-stone-100 line-clamp-2 mb-2",
+                      isElderlyMode ? "text-3xl leading-tight" : "text-sm"
+                    )}>{evt.title}</div>
+                    {evt.time && formatTimeDisplay(evt.time) && (
+                      <div className="flex items-center gap-1.5 mt-auto pt-2 border-t border-amber-100/30 dark:border-amber-900/20">
+                        <Clock size={isElderlyMode ? 20 : 12} className="text-stone-400" />
+                        <span className={cn(
+                          "font-bold text-stone-500 dark:text-stone-400",
+                          isElderlyMode ? "text-xl" : "text-[10px]"
+                        )}>{formatTimeDisplay(evt.time)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {isElderlyMode ? (
           <div className="space-y-8 pb-12">
             {/* 近七天行程 */}
@@ -1497,72 +1566,6 @@ export default function App() {
             </div>
           </div>
         </div>
-
-      {upcomingImportantEvents.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-3 pb-2">
-          <div className={cn(
-            "bg-amber-50/50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/30 rounded-xl shadow-sm",
-            isElderlyMode ? "p-5 md:p-6" : "p-3 md:p-4"
-          )}>
-            <div className="flex items-center justify-between mb-2">
-              <div className={cn(
-                "flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-[0.2em] uppercase",
-                isElderlyMode ? "text-lg" : "text-[10px] md:text-xs"
-              )}>
-                <Megaphone size={isElderlyMode ? 24 : 14} />
-                <span>置頂重要公告</span>
-              </div>
-              <span className={cn(
-                "font-bold text-amber-600/60 dark:text-amber-500/40 bg-amber-100/50 dark:bg-amber-900/40 rounded-full",
-                isElderlyMode ? "px-4 py-1 text-base" : "px-2 py-0.5 text-[10px]"
-              )}>
-                {upcomingImportantEvents.length} 則
-              </span>
-            </div>
-            <div className={cn(
-              "grid gap-2",
-              isElderlyMode ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
-              upcomingImportantEvents.length > 4 && "max-h-[320px] md:max-h-[450px] overflow-y-auto pr-1 custom-scrollbar"
-            )}>
-              {upcomingImportantEvents.map((evt) => (
-                <div key={evt.id} className={cn(
-                  "flex flex-col bg-white/80 dark:bg-stone-800/80 backdrop-blur-sm rounded-lg border border-amber-100/50 dark:border-amber-900/30 shadow-sm transition-all hover:shadow-md group",
-                  isElderlyMode ? "p-5" : "p-3"
-                )}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={cn(
-                      "text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1",
-                      isElderlyMode ? "text-lg" : "text-[10px]"
-                    )}>
-                      <Star size={isElderlyMode ? 18 : 12} className="fill-amber-500" />
-                      {format(safeParseISO(evt.start_date), 'MM/dd')} 
-                    </span>
-                    <span className={cn(
-                      "font-bold text-stone-400 dark:text-stone-500 group-hover:text-amber-600 transition-colors",
-                      isElderlyMode ? "text-lg" : "text-[10px]"
-                    )}>
-                      {evt.member_name}
-                    </span>
-                  </div>
-                  <div className={cn(
-                    "font-extrabold text-stone-800 dark:text-stone-100 line-clamp-1 mb-1",
-                    isElderlyMode ? "text-2xl" : "text-sm"
-                  )}>{evt.title}</div>
-                  {evt.time && (
-                    <div className="flex items-center gap-1 mt-auto">
-                      <Clock size={isElderlyMode ? 16 : 10} className="text-stone-400" />
-                      <span className={cn(
-                        "font-bold text-stone-500 dark:text-stone-400",
-                        isElderlyMode ? "text-lg" : "text-[10px]"
-                      )}>{evt.time}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
         {error && (
           <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 flex flex-col gap-3">

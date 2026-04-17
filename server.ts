@@ -2059,6 +2059,7 @@ async function startServer() {
 
     if (results.sqlite?.success || results.gas?.success || results.sheets?.success) {
       clearEventsCache();
+      writeBuffer.delete(id);
     }
 
     res.json({ success: true, results });
