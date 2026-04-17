@@ -3,7 +3,8 @@ import { Solar } from 'lunar-javascript';
 import { 
   collection, 
   onSnapshot, 
-  query
+  query,
+  orderBy
 } from 'firebase/firestore';                
 import { db } from './firebase';
 import { 
@@ -211,9 +212,6 @@ const getEventIcon = (title: string | undefined | null, size: number = 10) => {
   return null;
 };
 
-import { onSnapshot, collection, query, orderBy } from 'firebase/firestore';
-import { db } from './firebase';
-
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
@@ -320,7 +318,6 @@ export default function App() {
         body: JSON.stringify(updatedEvent)
       });
       if (!res.ok) throw new Error('移動失敗');
-      fetchEvents(false);
     } catch (err: any) {
       setEvents(previousEvents);
       showToast(`移動失敗: ${err.message}`, 'error');
@@ -395,19 +392,17 @@ export default function App() {
         result = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(`伺服器回應異常`);
+        console.error("Non-JSON response from server:", text);
+        throw new Error(`伺服器回應異常 (非 JSON): ${text.substring(0, 50)}...`);
       }
 
-      if (!res.ok) throw new Error(result.error || '快速新增失敗');
+      if (!res.ok) throw new Error(result.error || `操作失敗 (${res.status})`);
       
       showToast(`已成功新增 ${member} 排休`);
       
       if (result.id) {
         setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
       }
-      
-      // 稍微延遲重新抓取，確保後端同步完成
-      setTimeout(() => fetchEvents(false), 500);
     } catch (err: any) {
       console.error("Quick Leave Error:", err);
       showToast(`新增失敗: ${err.message}`, 'error');
@@ -474,10 +469,11 @@ export default function App() {
         result = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(`伺服器回應異常`);
+        console.error("Non-JSON response from server:", text);
+        throw new Error(`伺服器回應異常 (非 JSON): ${text.substring(0, 50)}...`);
       }
 
-      if (!res.ok) throw new Error(result.error || '快速新增失敗');
+      if (!res.ok) throw new Error(result.error || `操作失敗 (${res.status})`);
       
       // Update sticky lock
       const lockData = { is_important: false, timestamp: Date.now() };
@@ -489,9 +485,6 @@ export default function App() {
       if (result.id) {
         setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
       }
-      
-      // 稍微延遲重新抓取，確保後端同步完成
-      setTimeout(() => fetchEvents(false), 500);
     } catch (err: any) {
       console.error("Quick Work Error:", err);
       showToast(`新增失敗: ${err.message}`, 'error');
@@ -518,10 +511,10 @@ export default function App() {
   useEffect(() => {
     // 1. Fetch static resources (Weather, Holidays)
     fetchWeather();
-    fetchHolidays(2026);
+    fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
 
-    // 2. Set up real-time listener for events
+    // 2. Set up real-time listener for events in Firestore
     const q = query(collection(db, 'events'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const dbEvents: Event[] = snapshot.docs.map(doc => ({
@@ -529,7 +522,7 @@ export default function App() {
         id: doc.id
       }));
 
-      // Reuse the processing logic
+      // Process events with importance lock handling to prevent UI "jump back"
       const now = Date.now();
       const LOCK_TTL = 300000;
       
@@ -551,18 +544,22 @@ export default function App() {
       });
       
       setEvents(processedEvents);
-      setStorageSource('cloud');
+      setStorageSource('firestore');
       setLoading(false);
       setError(null);
     }, (error) => {
-        // Use the required error handler
-        handleFirestoreError(error, OperationType.LIST, 'events');
-        setError('無法取得雲端活動資料');
+        console.error("Firestore real-time error:", error);
+        setError("無法即時取得資料，請檢查網路連線或 Firebase 設定。");
         setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Use a separate effect for year-based holiday updates
+  useEffect(() => {
+    fetchHolidays(currentDate.getFullYear());
+  }, [currentDate.getFullYear()]);
 
   const fetchWeather = async () => {
     try {
@@ -682,65 +679,9 @@ export default function App() {
   const importanceLocker = useRef<Map<string, { is_important: boolean, timestamp: number }>>(new Map());
 
   const fetchEvents = async (showLoading = true) => {
-    // We now use real-time listeners for data, but keep this for metadata/config
-    try {
-      if (showLoading) setLoading(true);
-      const res = await fetch('/api/config-status');
-      if (res.ok) {
-        const data = await res.json();
-        setConfigStatus(data);
-      }
-    } catch (e) {
-      console.error("Config fetch error:", e);
-    } finally {
-      if (showLoading) setLoading(false);
-    }
+    // We now use real-time listeners for data, but keep this to check config status if needed
+    fetchConfigStatus();
   };
-
-  useEffect(() => {
-    setLoading(true);
-    // Real-time listener for events in Firestore
-    const q = query(collection(db, 'events'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const now = Date.now();
-      const LOCK_TTL = 300000;
-      
-      const firestoreEvents = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let is_important = !!data.is_important;
-        const idStr = doc.id;
-        const uuidStr = data.uuid ? String(data.uuid) : '';
-        const signature = `${data.title}|${data.start_date}|${data.member_name}`.toLowerCase().trim();
-        
-        const lock = importanceLocker.current.get(idStr) || 
-                     (uuidStr ? importanceLocker.current.get(uuidStr) : null) ||
-                     importanceLocker.current.get(signature);
-
-        if (lock && (now - lock.timestamp < LOCK_TTL)) {
-          if (is_important !== lock.is_important) {
-            is_important = lock.is_important;
-          }
-        }
-
-        return {
-          id: idStr,
-          ...data,
-          is_important
-        } as Event;
-      });
-      
-      setEvents(firestoreEvents);
-      setStorageSource('firestore');
-      setLoading(false);
-      setError(null);
-    }, (err) => {
-      console.error("Firestore real-time error:", err);
-      setError("無法即時取得資料，請檢查網路連線或 Firebase 設定。");
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const handleEditClick = (event: Event) => {
     setEditingEventId(event.id);
@@ -863,8 +804,6 @@ export default function App() {
       if (!res.ok || !result.success) {
         throw new Error(result.error || '刪除請求失敗');
       }
-      
-      fetchEvents(false);
     } catch (err: any) {
       setEvents(previousEvents);
       showToast(`刪除失敗: ${err.message}`, 'error');
@@ -960,9 +899,6 @@ export default function App() {
         is_important: false,
       });
       showToast(isEditing ? '活動已更新' : '活動已儲存');
-      
-      // 成功後，稍微延遲在背景重新抓取最新資料 (給 Sheets API 緩衝)
-      setTimeout(() => fetchEvents(false), 2000);
       
     } catch (err: any) {
       setEvents(previousEvents);

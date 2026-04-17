@@ -105,178 +105,220 @@ async function getTodayHoliday(year: number, dateStrYYYYMMDD: string) {
   }
 }
 
-// --- Express App Setup ---
-const app = express();
-const PORT = 3000;
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
 
-app.use(express.json());
+  app.use(express.json());
 
-// API: Config Status
-app.get("/api/config-status", (req, res) => {
-  res.json({
-    firebase: !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
-    line: !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID),
-    google: false // Explicitly disabled
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
   });
-});
 
-// API: Get Events (Firestore fallback for non-realtime clients like LINE)
-app.get("/api/events", async (req, res) => {
-  try {
-    const database = getDb();
-    if (!database) throw new Error("DB not initialized");
-    const snapshot = await database.collection('events').get();
-    const events = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-    res.json({ events, source: 'firestore' });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API: Create Event
-app.post("/api/events", async (req, res) => {
-  try {
-    const database = getDb();
-    if (!database) throw new Error("DB not initialized");
-    const id = uuidv4();
-    const eventData = { ...req.body, id, createdAt: FieldValue.serverTimestamp() };
-    await database.collection('events').doc(id).set(eventData);
-    
-    // Check for same-day notification
-    const today = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-    if (eventData.start_date === today) {
-        let msg = `⏰ 【即時行程】${eventData.member_name} 新增了行程：\n📌 ${eventData.title}`;
-        if (eventData.time) msg += `\n🕒 時間：${eventData.time}`;
-        sendLineNotification(msg);
-    }
-
-    res.json({ success: true, id, event: eventData });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API: Update Event
-app.put("/api/events/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const database = getDb();
-    if (!database) throw new Error("DB not initialized");
-    await database.collection('events').doc(id).update({ ...req.body, updatedAt: FieldValue.serverTimestamp() });
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API: Delete Event
-app.delete("/api/events/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const database = getDb();
-    if (!database) throw new Error("DB not initialized");
-    await database.collection('events').doc(id).delete();
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API: Daily Push (Cron)
-app.get("/api/cron/daily-push", async (req, res) => {
-  try {
-    const database = getDb();
-    if (!database) throw new Error("DB not initialized");
-    
-    const tz = "Asia/Taipei";
-    const now = new Date();
-    const todayStr = new Date(now.toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("zh-TW", { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-    const [yyyy, mm, dd] = todayStr.split('-');
-
-    const snapshot = await database.collection('events').get();
-    const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
-    const todaysEvents = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
-
-    const [weather, holiday] = await Promise.all([getTodayWeather(), getTodayHoliday(parseInt(yyyy), todayStr)]);
-
-    if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
-
-    let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
-    if (holiday) msg += `🎈 節日：${holiday}\n`;
-    if (weather) msg += `⛅ 天氣：${weather}\n`;
-    msg += `\n`;
-
-    if (todaysEvents.length > 0) {
-      todaysEvents.sort((a: any, b: any) => (b.is_important ? 1 : 0) - (a.is_important ? 1 : 0));
-      todaysEvents.forEach((e: any, i: number) => {
-        msg += `${e.is_important ? '⭐' : '📌'} ${i+1}. ${e.title}\n`;
-        if (e.member_name) msg += `👤 ${e.member_name}${e.companions ? ' + ' + e.companions : ''}\n`;
-        if (e.time) msg += `⏰ ${e.time}\n`;
-        if (i < todaysEvents.length - 1) msg += `\n`;
-      });
-    } else {
-      msg += `✨ 今日無特別排程活動`;
-    }
-
-    await sendLineNotification(msg.trim());
-    res.json({ success: true, count: todaysEvents.length });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// LINE Webhook
-const lineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => next();
-app.post("/api/line/webhook", lineMiddleware, async (req, res) => {
-  if (!lineClient) return res.sendStatus(200);
-  try {
-    const events: WebhookEvent[] = req.body.events;
-    await Promise.all(events.map(handleLineEvent));
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).end();
-  }
-});
-
-async function handleLineEvent(event: WebhookEvent) {
-  if (!lineClient) return;
-  if (event.type === 'join' && event.source.type === 'group') {
-    return lineClient.replyMessage(event.replyToken, { type: 'text', text: `機器人已加入！群組 ID：\n${event.source.groupId}` });
-  }
-  if (event.type === 'message' && event.message.type === 'text') {
-    const text = event.message.text.trim().toLowerCase();
-    if (text === 'id') {
-      const id = event.source.type === 'group' ? event.source.groupId : event.source.userId;
-      return lineClient.replyMessage(event.replyToken, { type: 'text', text: `ID：${id}` });
-    }
-    if (text === '今天行程' || text === '今日行程') {
-      const database = getDb();
-      if (!database) return;
-      const todayStr = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-      const snapshot = await database.collection('events').get();
-      const events = snapshot.docs.map((doc: any) => doc.data());
-      const filtered = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
+  // API: Taiwan Calendar Proxy
+  app.get("/api/taiwan-calendar", async (req, res) => {
+    const year = req.query.year || new Date().getFullYear();
+    try {
+      const response = await axios.get(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`, { timeout: 8000 });
+      const rawData = response.data;
       
-      let msg = filtered.length > 0 
-        ? filtered.map((e: any) => `• ${e.title} (${e.member_name})`).join('\n')
-        : '今天沒有排定的行程喔！';
-      return lineClient.replyMessage(event.replyToken, { type: 'text', text: `📅 今日行程：\n${msg}` });
+      const holidays: Record<string, string> = {};
+      const makeupWorkdays: Record<string, string> = {};
+      
+      if (Array.isArray(rawData)) {
+        rawData.forEach((day: any) => {
+          if (day.date && day.date.length === 8) {
+            const formattedDate = `${day.date.substring(0, 4)}-${day.date.substring(4, 6)}-${day.date.substring(6, 8)}`;
+            if (day.isHoliday) {
+              if (day.description && !day.description.includes("星期")) {
+                holidays[formattedDate] = day.description;
+              }
+            } else if (day.description && (day.description.includes("補") || day.description.includes("上班"))) {
+              makeupWorkdays[formattedDate] = day.description;
+            }
+          }
+        });
+      }
+      res.json({ holidays, makeupWorkdays });
+    } catch (error: any) {
+      console.error("Taiwan Calendar Proxy Error:", error.message);
+      res.status(500).json({ error: "Failed to fetch Taiwan calendar" });
+    }
+  });
+
+  // API: Config Status
+  app.get("/api/config-status", (req, res) => {
+    res.json({
+      firebase: !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+      line: !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID),
+      google: false
+    });
+  });
+
+  // API: Get Events
+  app.get("/api/events", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      const snapshot = await database.collection('events').get();
+      const events = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+      res.json({ events, source: 'firestore' });
+    } catch (error: any) {
+      console.error("❌ GET /api/events Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Create Event
+  app.post("/api/events", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      const id = uuidv4();
+      const eventData = { ...req.body, id, createdAt: FieldValue.serverTimestamp() };
+      await database.collection('events').doc(id).set(eventData);
+      
+      const today = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      if (eventData.start_date === today) {
+          let msg = `⏰ 【新行程通知】${eventData.member_name} 新增了行程：\n📌 ${eventData.title}`;
+          if (eventData.time) msg += `\n🕒 時間：${eventData.time}`;
+          sendLineNotification(msg);
+      }
+      res.json({ success: true, id, event: eventData });
+    } catch (error: any) {
+      console.error("❌ POST /api/events Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Update Event
+  app.put("/api/events/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      await database.collection('events').doc(id).update({ ...req.body, updatedAt: FieldValue.serverTimestamp() });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`❌ PUT /api/events/${req.params.id} Error:`, error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Delete Event
+  app.delete("/api/events/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      await database.collection('events').doc(id).delete();
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`❌ DELETE /api/events/${req.params.id} Error:`, error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Daily Push (Cron)
+  app.get("/api/cron/daily-push", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      
+      const tz = "Asia/Taipei";
+      const now = new Date();
+      const todayStr = new Date(now.toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("zh-TW", { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      const [yyyy] = todayStr.split('-');
+
+      const snapshot = await database.collection('events').get();
+      const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
+      const todaysEvents = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
+
+      const [weather, holiday] = await Promise.all([getTodayWeather(), getTodayHoliday(parseInt(yyyy), todayStr)]);
+      if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
+
+      let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
+      if (holiday) msg += `🎈 節日：${holiday}\n`;
+      if (weather) msg += `⛅ 天氣：${weather}\n\n`;
+
+      if (todaysEvents.length > 0) {
+        todaysEvents.sort((a: any, b: any) => (b.is_important ? 1 : 0) - (a.is_important ? 1 : 0));
+        todaysEvents.forEach((e: any, i: number) => {
+          msg += `${e.is_important ? '⭐' : '📌'} ${i+1}. ${e.title}\n`;
+          if (e.member_name) msg += `👤 ${e.member_name}${e.companions ? ' + ' + e.companions : ''}\n`;
+          if (e.time) msg += `⏰ ${e.time}\n\n`;
+        });
+      } else {
+        msg += `✨ 今日無特別排程活動`;
+      }
+
+      await sendLineNotification(msg.trim());
+      res.json({ success: true, count: todaysEvents.length });
+    } catch (error: any) {
+      console.error("❌ GET /api/cron/daily-push Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // LINE Webhook
+  const lineMiddleware = lineConfig.channelSecret ? middleware(lineConfig) : (req: any, res: any, next: any) => next();
+  app.post("/api/line/webhook", lineMiddleware, async (req, res) => {
+    if (!lineClient) return res.sendStatus(200);
+    try {
+      const events: WebhookEvent[] = req.body.events;
+      await Promise.all(events.map(handleLineEvent));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("❌ LINE Webhook Error:", err);
+      res.status(500).end();
+    }
+  });
+
+  async function handleLineEvent(event: WebhookEvent) {
+    if (!lineClient) return;
+    if (event.type === 'join' && event.source.type === 'group') {
+      return lineClient.replyMessage(event.replyToken, { type: 'text', text: `機器人已加入！群組 ID：\n${event.source.groupId}` });
+    }
+    if (event.type === 'message' && event.message.type === 'text') {
+      const text = event.message.text.trim().toLowerCase();
+      if (text === 'id') {
+        const id = event.source.type === 'group' ? event.source.groupId : event.source.userId;
+        return lineClient.replyMessage(event.replyToken, { type: 'text', text: `ID：${id}` });
+      }
+      if (text === '今天行程' || text === '今日行程') {
+        const database = getDb();
+        if (!database) return;
+        const todayStr = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+        const snapshot = await database.collection('events').get();
+        const events = snapshot.docs.map((doc: any) => doc.data());
+        const filtered = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
+        
+        let msg = filtered.length > 0 
+          ? filtered.map((e: any) => `• ${e.title} (${e.member_name})`).join('\n')
+          : '今天沒有排定的行程喔！';
+        return lineClient.replyMessage(event.replyToken, { type: 'text', text: `📅 今日行程：\n${msg}` });
+      }
     }
   }
-}
 
-// Static/SPA Fallback
-if (process.env.NODE_ENV !== "production") {
+  // Static/SPA Fallback
+  if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
-} else {
+  } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  return app;
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+export const appPromise = startServer();
