@@ -328,30 +328,67 @@ async function startServer() {
         return lineClient.replyMessage(event.replyToken, { type: 'text', text: `您的 ID 是：\n${id}` });
       }
 
-      // 指令 2: 今天行程
-      if (text === '今天行程' || text === '今日行程' || text === '當日行程') {
+      // 指令 2: 行程查詢系列
+      if (text === '今天行程' || text === '今日行程' || text === '當日行程' || text === '明天行程' || text === '明日行程' || text === '近期行程' || text === '本週行程' || text.endsWith('行程')) {
         try {
           const database = getDb();
           if (!database) {
-            console.error("❌ Firestore not initialized inside LINE event");
             return lineClient.replyMessage(event.replyToken, { type: 'text', text: '抱歉，資料庫連線中，請稍後再試。' });
           }
           
           const tz = "Asia/Taipei";
-          const todayStr = new Date().toLocaleDateString("zh-TW", { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-          
-          console.log(`📅 Searching events for: ${todayStr}`);
-          const snapshot = await database.collection('events').get();
-          const allEvents = snapshot.docs.map((doc: any) => doc.data());
-          const filtered = allEvents.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
-          
-          if (filtered.length === 0) {
-            return lineClient.replyMessage(event.replyToken, { type: 'text', text: `📅 ${todayStr}\n今天沒有排定的行程喔！✨` });
+          const now = new Date();
+          let targetDate = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+          let isRange = false;
+          let rangeDays = 1;
+          let filterMember = "";
+
+          // 判斷日期
+          if (text.includes('明天') || text.includes('明日')) {
+            targetDate.setDate(targetDate.getDate() + 1);
+          } else if (text.includes('近期') || text.includes('本週')) {
+            isRange = true;
+            rangeDays = 7;
           }
 
-          let msg = `📅 ${todayStr} 行程摘要：\n\n`;
+          // 判斷人名 (例如: 小明行程)
+          if (text.endsWith('行程') && !['今天','今日','當日','明天','明日','近期','本週'].some(k => text.startsWith(k))) {
+            filterMember = text.replace('行程', '');
+          }
+
+          const formatDate = (d: Date) => d.toISOString().split('T')[0];
+          const startDateStr = formatDate(targetDate);
+          const endDate = new Date(targetDate);
+          endDate.setDate(endDate.getDate() + (rangeDays - 1));
+          const endDateStr = formatDate(endDate);
+
+          const snapshot = await database.collection('events').get();
+          const allEvents = snapshot.docs.map((doc: any) => doc.data());
+          
+          let filtered = allEvents.filter((e: any) => {
+            const evStart = e.start_date;
+            const evEnd = e.end_date || evStart;
+            // 日期重疊邏輯
+            const dateMatch = isRange 
+              ? (evStart <= endDateStr && evEnd >= startDateStr)
+              : (evStart <= startDateStr && evEnd >= startDateStr);
+            
+            const memberMatch = filterMember ? e.member_name.includes(filterMember) : true;
+            return dateMatch && memberMatch;
+          });
+
+          // 排序
+          filtered.sort((a: any, b: any) => a.start_date.localeCompare(b.start_date) || (a.time || "").localeCompare(b.time || ""));
+
+          if (filtered.length === 0) {
+            let emptyMsg = `📅 ${isRange ? startDateStr + ' ~ ' + endDateStr : startDateStr}\n`;
+            emptyMsg += filterMember ? `找不到 ${filterMember} 的行程喔！` : `沒有排定的行程喔！✨`;
+            return lineClient.replyMessage(event.replyToken, { type: 'text', text: emptyMsg });
+          }
+
+          let msg = `📅 ${isRange ? '本週' : (text.includes('明天') ? '明天' : '今日')}行程摘要${filterMember ? '(' + filterMember + ')' : ''}：\n\n`;
           filtered.forEach((e: any, index: number) => {
-            msg += `${index + 1}. [${e.member_name}] ${e.title}`;
+            msg += `${index + 1}. ${isRange ? '[' + e.start_date.slice(5) + '] ' : ''}[${e.member_name}] ${e.title}`;
             if (e.time) msg += ` (${e.time})`;
             msg += '\n';
           });
@@ -362,12 +399,28 @@ async function startServer() {
           return lineClient.replyMessage(event.replyToken, { type: 'text', text: '讀取行程時發生錯誤，請聯絡管理員。' });
         }
       }
+
+      // 指令 3: 天氣狀況
+      if (text === '天氣' || text === '現在天氣' || text === '今日天氣') {
+        const weather = await getTodayWeather();
+        const holiday = await getTodayHoliday(new Date().getFullYear(), new Date().toISOString().split('T')[0]);
+        let msg = `⛅ 目前氣象狀況：\n${weather || '暫時無法取得天氣資訊'}`;
+        if (holiday) msg += `\n\n🏮 今日節慶：${holiday}`;
+        return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg });
+      }
       
-      // 指令 3: 指令說明
+      // 指令 4: 指令說明
       if (text === '幫助' || text === '說明' || text === 'help') {
         return lineClient.replyMessage(event.replyToken, { 
           type: 'text', 
-          text: '🤖 機器人指令說明：\n1. 輸入「今天行程」：查看今日所有人的排程。\n2. 輸入「id」：取得目前對話或群組的 ID。\n3. 輸入「幫助」：顯示此說明。' 
+          text: '🤖 機器人指令說明：\n\n' +
+                '1. 「今天行程」：看今天的排程\n' +
+                '2. 「明天行程」：看明天的排程\n' +
+                '3. 「近期行程」：看未來一週的排程\n' +
+                '4. 「[人名]行程」：看特定人的行程 (如: 小明行程)\n' +
+                '5. 「天氣」：看目前天氣與節慶\n' +
+                '6. 「id」：取得對話 ID\n' +
+                '7. 「幫助」：顯示此說明' 
         });
       }
     }
