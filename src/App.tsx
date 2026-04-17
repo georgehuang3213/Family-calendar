@@ -634,10 +634,11 @@ export default function App() {
         throw new Error(data.error || '無法取得活動資料');
       }
       
-      // 確保所有 ID 都轉換為字串
+      // 確保所有 ID 都轉換為字串，且 is_important 為布林值
       const processedEvents = (data.events || []).map((event: Event) => ({
         ...event,
-        id: String(event.id)
+        id: String(event.id),
+        is_important: !!event.is_important
       }));
       
       setEvents(processedEvents);
@@ -813,24 +814,6 @@ export default function App() {
       setEvents([...events, optimisticEvent]);
     }
 
-    // 關閉視窗並重置
-    setIsModalOpen(false);
-    setEditingEventId(null);
-    setNewEvent({
-      title: '',
-      description: '',
-      start_date: format(new Date(), 'yyyy-MM-dd'),
-      end_date: format(new Date(), 'yyyy-MM-dd'),
-      time: '',
-      start_time: '',
-      end_time: '',
-      member_name: FAMILY_MEMBERS[0],
-      color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
-      companions: '',
-      is_important: false,
-    });
-    showToast(isEditing ? '活動已更新' : '活動已儲存');
-
     try {
       const url = isEditing ? `/api/events/${editingEventId}` : '/api/events';
       const method = isEditing ? 'PUT' : 'POST';
@@ -857,13 +840,36 @@ export default function App() {
 
       if (!res.ok) throw new Error(result.error || '儲存失敗');
       
-      // Update with real ID if it was a create
-      if (!isEditing && result.id) {
+      // Update with server confirmed data (prevents "jump back" if fetchEvents returns stale data)
+      if (result.event) {
+        const serverEvent = { ...result.event, id: String(result.event.id) };
+        setEvents(prev => prev.map(ev => 
+          (ev.id === optimisticEvent.id || String(ev.id) === serverEvent.id) ? serverEvent : ev
+        ));
+      } else if (!isEditing && result.id) {
         setEvents(prev => prev.map(ev => ev.id === optimisticEvent.id ? { ...ev, id: result.id } : ev));
       }
+
+      // Everything succeeded, close modal and reset form
+      setIsModalOpen(false);
+      setEditingEventId(null);
+      setNewEvent({
+        title: '',
+        description: '',
+        start_date: format(new Date(), 'yyyy-MM-dd'),
+        end_date: format(new Date(), 'yyyy-MM-dd'),
+        time: '',
+        start_time: '',
+        end_time: '',
+        member_name: FAMILY_MEMBERS[0],
+        color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+        companions: '',
+        is_important: false,
+      });
+      showToast(isEditing ? '活動已更新' : '活動已儲存');
       
-      // 成功後，在背景重新抓取最新資料
-      fetchEvents(false);
+      // 成功後，稍微延遲在背景重新抓取最新資料 (給 Sheets API 緩衝)
+      setTimeout(() => fetchEvents(false), 2000);
       
     } catch (err: any) {
       setEvents(previousEvents);
@@ -1458,22 +1464,64 @@ export default function App() {
         </div>
 
       {upcomingImportantEvents.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 pb-2">
-          <div className="bg-amber-50 dark:bg-amber-900/40 border-2 border-amber-200 dark:border-amber-700/50 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black mb-3 text-sm tracking-widest">
-              <Megaphone size={18} />
-              <span>置頂重要公告</span>
+        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-3 pb-2">
+          <div className={cn(
+            "bg-amber-50/50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/30 rounded-xl shadow-sm",
+            isElderlyMode ? "p-5 md:p-6" : "p-3 md:p-4"
+          )}>
+            <div className="flex items-center justify-between mb-2">
+              <div className={cn(
+                "flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-[0.2em] uppercase",
+                isElderlyMode ? "text-lg" : "text-[10px] md:text-xs"
+              )}>
+                <Megaphone size={isElderlyMode ? 24 : 14} />
+                <span>置頂重要公告</span>
+              </div>
+              <span className={cn(
+                "font-bold text-amber-600/60 dark:text-amber-500/40 bg-amber-100/50 dark:bg-amber-900/40 rounded-full",
+                isElderlyMode ? "px-4 py-1 text-base" : "px-2 py-0.5 text-[10px]"
+              )}>
+                {upcomingImportantEvents.length} 則
+              </span>
             </div>
-            <div className="space-y-3">
+            <div className={cn(
+              "grid gap-2",
+              isElderlyMode ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+              upcomingImportantEvents.length > 4 && "max-h-[320px] md:max-h-[450px] overflow-y-auto pr-1 custom-scrollbar"
+            )}>
               {upcomingImportantEvents.map((evt) => (
-                <div key={evt.id} className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 bg-white dark:bg-stone-800 p-3 rounded-lg border border-amber-100 dark:border-amber-900/40 shadow-sm transition-all hover:shadow-md">
-                  <span className="text-amber-600 dark:text-amber-500 font-bold min-w-[80px] text-sm flex items-center gap-1">
-                    <Star size={14} className="fill-amber-500" />
-                    {format(safeParseISO(evt.start_date), 'MM/dd')} 
-                  </span>
-                  <span className="font-extrabold text-stone-800 dark:text-stone-100 text-lg">{evt.title}</span>
-                  {evt.time && <span className="text-xs font-bold text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full outline outline-1 outline-stone-200 dark:outline-stone-600 self-start md:self-auto">{evt.time}</span>}
-                  <span className="text-xs font-bold text-amber-700/80 dark:text-amber-400/80 mt-1 md:mt-0">{evt.member_name}</span>
+                <div key={evt.id} className={cn(
+                  "flex flex-col bg-white/80 dark:bg-stone-800/80 backdrop-blur-sm rounded-lg border border-amber-100/50 dark:border-amber-900/30 shadow-sm transition-all hover:shadow-md group",
+                  isElderlyMode ? "p-5" : "p-3"
+                )}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={cn(
+                      "text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1",
+                      isElderlyMode ? "text-lg" : "text-[10px]"
+                    )}>
+                      <Star size={isElderlyMode ? 18 : 12} className="fill-amber-500" />
+                      {format(safeParseISO(evt.start_date), 'MM/dd')} 
+                    </span>
+                    <span className={cn(
+                      "font-bold text-stone-400 dark:text-stone-500 group-hover:text-amber-600 transition-colors",
+                      isElderlyMode ? "text-lg" : "text-[10px]"
+                    )}>
+                      {evt.member_name}
+                    </span>
+                  </div>
+                  <div className={cn(
+                    "font-extrabold text-stone-800 dark:text-stone-100 line-clamp-1 mb-1",
+                    isElderlyMode ? "text-2xl" : "text-sm"
+                  )}>{evt.title}</div>
+                  {evt.time && (
+                    <div className="flex items-center gap-1 mt-auto">
+                      <Clock size={isElderlyMode ? 16 : 10} className="text-stone-400" />
+                      <span className={cn(
+                        "font-bold text-stone-500 dark:text-stone-400",
+                        isElderlyMode ? "text-lg" : "text-[10px]"
+                      )}>{evt.time}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

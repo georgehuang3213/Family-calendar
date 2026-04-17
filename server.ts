@@ -41,9 +41,81 @@ function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
   return resultPromise;
 }
 
+// Buffer to store recent writes to combat eventual consistency (e.g. Google Sheets API delay)
+const writeBuffer: Map<string, { event: any, timestamp: number }> = new Map();
+const WRITE_BUFFER_TTL = 60000; // Increase to 60 seconds for better consistency
+
+function updateWriteBuffer(id: string | number, eventData: any) {
+  const idStr = String(id);
+  console.log(`📡 Updating write buffer for event ${idStr}`);
+  writeBuffer.set(idStr, { 
+    event: { ...eventData, id: idStr }, 
+    timestamp: Date.now() 
+  });
+}
+
+function applyWriteBuffer(events: any[]) {
+  const now = Date.now();
+  const result = [...events];
+  
+  // Clear expired entries
+  for (const [id, entry] of writeBuffer.entries()) {
+    if (now - entry.timestamp > WRITE_BUFFER_TTL) {
+      writeBuffer.delete(id);
+    }
+  }
+
+  // Map to help with secondary matching
+  const bufferValues = Array.from(writeBuffer.values());
+
+  const finalResult = result.map(fetchedEvent => {
+    const fetchedId = String(fetchedEvent.id);
+    const uuid = fetchedEvent.uuid ? String(fetchedEvent.uuid) : null;
+    
+    // Priority 1: Direct ID match
+    let buffered = writeBuffer.get(fetchedId);
+    
+    // Priority 2: UUID match
+    if (!buffered && uuid) {
+      buffered = bufferValues.find(b => b.event.uuid === uuid);
+    }
+    
+    // Priority 3: Cross-source ID match (e.g. "5" matches "Sheet1-5" or vice versa)
+    if (!buffered) {
+      buffered = bufferValues.find(b => {
+        const bId = String(b.event.id);
+        return bId.endsWith(`-${fetchedId}`) || fetchedId.endsWith(`-${bId}`);
+      });
+    }
+
+    if (buffered) {
+      console.log(`📡 Applying buffered state to event ${fetchedId} (Match found by ${buffered.event.uuid === uuid ? 'UUID' : 'ID'})`);
+      return { ...fetchedEvent, ...buffered.event };
+    }
+    return fetchedEvent;
+  });
+
+  // Append new events that are in buffer but not yet in fetched results
+  const finalFetchedIds = new Set(finalResult.map(e => String(e.id)));
+  const finalFetchedUuids = new Set(finalResult.filter(e => e.uuid).map(e => String(e.uuid)));
+  
+  for (const entry of bufferValues) {
+    const bId = String(entry.event.id);
+    const bUuid = entry.event.uuid ? String(entry.event.uuid) : null;
+    
+    if (!finalFetchedIds.has(bId) && (!bUuid || !finalFetchedUuids.has(bUuid))) {
+      console.log(`📡 Appending buffered new event: ${entry.event.title} (${bId})`);
+      finalResult.push(entry.event);
+    }
+  }
+
+  return finalResult;
+}
+
 function clearEventsCache() {
   console.log("🧹 Clearing events cache");
   eventsCache = null;
+  fetchEventsPromise = null;
 }
 
 // Reusable fetch logic
@@ -93,6 +165,7 @@ async function fetchEventsInternal() {
                   const normalized = String(rawHeader).toLowerCase().trim().replace(/[_\s]/g, '');
                   const value = row[i] || "";
                   if (normalized === 'id') event.id = value;
+                  else if (normalized === 'uuid') event.uuid = value;
                   else if (normalized === 'title') event.title = value;
                   else if (normalized === 'description') event.description = value;
                   else if (normalized === 'startdate') event.start_date = value;
@@ -102,6 +175,7 @@ async function fetchEventsInternal() {
                   else if (normalized === 'color') event.color = value;
                   else if (normalized === 'important' || normalized === '重要') {
                     event.is_important = /^(yes|true|1|v|o|y|是|重要)$/i.test(value.toString().trim());
+                    event._has_important_col = true;
                   }
                   event[rawHeader] = value;
                 });
@@ -115,7 +189,56 @@ async function fetchEventsInternal() {
             };
 
             events = [...processRows(mainRows, MAIN_SHEET_NAME), ...processRows(leavesRows, LEAVES_SHEET_NAME)];
+            events = applyWriteBuffer(events);
             source = "google_sheets_api";
+
+            // Sync with local SQLite to ensure fallback has latest 'important' status
+            if (db_local && events.length > 0) {
+              enqueueWrite(async () => {
+                try {
+                  const upsertStmt = db_local.prepare(`
+                    INSERT INTO events (uuid, title, description, start_date, end_date, member_name, color, time, is_important, companions)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(uuid) DO UPDATE SET
+                      title=excluded.title,
+                      description=excluded.description,
+                      start_date=excluded.start_date,
+                      end_date=excluded.end_date,
+                      member_name=excluded.member_name,
+                      color=excluded.color,
+                      time=excluded.time,
+                      is_important=CASE WHEN excluded.is_important = -1 THEN is_important ELSE excluded.is_important END,
+                      companions=excluded.companions
+                  `);
+                  
+                  const transaction = db_local.transaction((syncEvents: any[]) => {
+                    for (const ev of syncEvents) {
+                      const uuid = ev.uuid || ev.id;
+                      if (!uuid) continue;
+                      
+                      // -1 means we didn't find the column in this source, so keep SQLite's value
+                      const importanceVal = (ev.is_important === undefined) ? -1 : (ev.is_important ? 1 : 0);
+                      
+                      upsertStmt.run(
+                        String(uuid),
+                        ev.title || "無標題",
+                        ev.description || "",
+                        ev.start_date || "",
+                        ev.end_date || "",
+                        ev.member_name || "全家",
+                        ev.color || "#4F46E5",
+                        ev.time || "",
+                        importanceVal,
+                        ev.companions || ""
+                      );
+                    }
+                  });
+                  transaction(events);
+                } catch (e) {
+                  console.error("SQLite Sync Error:", e);
+                }
+              });
+            }
           }
         } catch (e: any) {
           console.error("❌ Sheets API Fetch Error:", e.message);
@@ -133,10 +256,62 @@ async function fetchEventsInternal() {
           }
 
           if (Array.isArray(response.data)) {
-            events = response.data;
+            let eventsFromScript = applyWriteBuffer(response.data);
+            
+            // Merge with local SQLite data to preserve 'is_important' if Apps Script misses it
+            if (db_local) {
+              try {
+                const localRows = db_local.prepare("SELECT uuid, id, is_important FROM events").all();
+                const localMap = new Map();
+                localRows.forEach((r: any) => {
+                  if (r.uuid) localMap.set(String(r.uuid), r.is_important);
+                  if (r.id) localMap.set(String(r.id), r.is_important);
+                });
+                
+                eventsFromScript = eventsFromScript.map((ev: any) => {
+                  if (ev.is_important === undefined || ev.is_important === null) {
+                    const localStatus = localMap.get(String(ev.id)) || localMap.get(String(ev.uuid));
+                    if (localStatus !== undefined) {
+                      return { ...ev, is_important: Boolean(localStatus) };
+                    }
+                  }
+                  return ev;
+                });
+              } catch (e) {
+                console.error("Local merge error:", e);
+              }
+            }
+            
+            events = eventsFromScript;
             source = "google_apps_script";
           } else if (response.data && Array.isArray(response.data.events)) {
-            events = response.data.events;
+            let eventsFromScript = applyWriteBuffer(response.data.events);
+            
+            // Merge with local SQLite data
+            if (db_local) {
+              try {
+                const localRows = db_local.prepare("SELECT uuid, id, is_important FROM events").all();
+                const localMap = new Map();
+                localRows.forEach((r: any) => {
+                  if (r.uuid) localMap.set(String(r.uuid), r.is_important);
+                  if (r.id) localMap.set(String(r.id), r.is_important);
+                });
+                
+                eventsFromScript = eventsFromScript.map((ev: any) => {
+                  if (ev.is_important === undefined || ev.is_important === null) {
+                    const localStatus = localMap.get(String(ev.id)) || localMap.get(String(ev.uuid));
+                    if (localStatus !== undefined) {
+                      return { ...ev, is_important: Boolean(localStatus) };
+                    }
+                  }
+                  return ev;
+                });
+              } catch (e) {
+                console.error("Local merge error:", e);
+              }
+            }
+            
+            events = eventsFromScript;
             source = "google_apps_script";
           }
         } catch (e: any) {
@@ -150,7 +325,12 @@ async function fetchEventsInternal() {
         try {
           console.log("📡 Fetching from local SQLite fallback...");
           const rows = db_local.prepare("SELECT * FROM events").all();
-          events = rows.map((row: any) => ({ ...row, id: String(row.id) }));
+          events = rows.map((row: any) => ({ 
+            ...row, 
+            id: String(row.id),
+            is_important: Boolean(row.is_important)
+          }));
+          events = applyWriteBuffer(events);
           source = "sqlite_fallback";
         } catch (e: any) {
           console.error("❌ SQLite Fetch Error:", e.message);
@@ -356,6 +536,21 @@ async function startServer() {
       } catch (error: any) {
         if (!error.message.includes("duplicate column name")) {
           console.error("❌ SQLite 遷移失敗 (uuid):", error.message);
+        }
+      }
+
+      // Add unique index on uuid to support ON CONFLICT
+      try {
+        db_local.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_events_uuid ON events(uuid)");
+      } catch (e) {}
+
+      // Migration: Add 'is_important' column if it doesn't exist
+      try {
+        db_local.exec("ALTER TABLE events ADD COLUMN is_important INTEGER DEFAULT 0");
+        console.log("✅ SQLite 'is_important' 欄位已成功新增");
+      } catch (error: any) {
+        if (!error.message.includes("duplicate column name")) {
+          console.error("❌ SQLite 遷移失敗 (is_important):", error.message);
         }
       }
 
@@ -1100,8 +1295,15 @@ async function startServer() {
         });
 
         clearEventsCache();
+        updateWriteBuffer(eventId, { ...eventData, is_important: !!is_important });
         checkAndSendSameDayNotification(eventData, true);
-        return res.json({ success: true, source: "google_sheets_api", target: isLeave ? "leaves" : "main", id: eventId });
+        return res.json({ 
+          success: true, 
+          source: "google_sheets_api", 
+          target: isLeave ? "leaves" : "main", 
+          id: eventId,
+          event: { ...eventData, id: eventId, is_important: !!is_important }
+        });
       } catch (error: any) {
         console.error("Google Sheets API Save Error:", error.message);
         var sheetsWarning = error.message;
@@ -1129,8 +1331,14 @@ async function startServer() {
         }
         
         clearEventsCache();
+        updateWriteBuffer(response.data?.id || eventId, { ...eventData, is_important: !!is_important });
         checkAndSendSameDayNotification(eventData, true);
-        return res.json({ success: true, source: "google_apps_script", id: response.data?.id || eventId });
+        return res.json({ 
+          success: true, 
+          source: "google_apps_script", 
+          id: response.data?.id || eventId,
+          event: { ...eventData, id: response.data?.id || eventId, is_important: !!is_important }
+        });
       } catch (error: any) {
         console.error("Apps Script Save Error:", error.message);
         // It failed, we fall through to SQLite
@@ -1141,17 +1349,24 @@ async function startServer() {
     try {
       if (db_local) {
         const stmt = db_local.prepare(`
-          INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO events (uuid, title, description, start_date, end_date, time, member_name, color, companions, is_important)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "");
+        stmt.run(eventId, title, description || "", start_date, end_date, time || "", member_name, color, companions || "", is_important ? 1 : 0);
         
         let warningMsg = undefined;
         if (typeof sheetsWarning !== 'undefined') warningMsg = sheetsWarning;
         
         clearEventsCache();
+        updateWriteBuffer(eventId, { ...eventData, is_important: !!is_important });
         checkAndSendSameDayNotification(eventData, true);
-        return res.json({ success: true, source: "local", warning: warningMsg, id: eventId });
+        return res.json({ 
+          success: true, 
+          source: "local", 
+          warning: warningMsg, 
+          id: eventId,
+          event: { ...eventData, id: eventId, is_important: !!is_important }
+        });
       } else {
         return res.status(500).json({ 
           error: "儲存失敗：Google 試算表未設定且本地資料庫不可用。",
@@ -1250,13 +1465,15 @@ async function startServer() {
         }
 
         if (rowIndex !== -1) {
-          // Fetch headers to ensure correct column mapping
-          const headerResponse = await sheets.spreadsheets.values.get({
+          // Fetch headers and current row to ensure correct column mapping and data preservation
+          const fullResponse = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${targetSheet}!A1:Z1`,
+            range: `${targetSheet}!A1:Z${rowIndex}`,
           });
           
-          const rawHeaders = headerResponse.data.values?.[0] || [];
+          const allRows = fullResponse.data.values || [];
+          const rawHeaders = allRows[0] || [];
+          const currentRow = allRows[rowIndex - 1] || [];
           const normalizedHeaders = rawHeaders.map(h => String(h).toLowerCase().trim().replace(/[_\s]/g, ''));
           
           // Auto-add "重要" header if missing to support pinned events
@@ -1275,8 +1492,8 @@ async function startServer() {
             }
           }
           
-          // Prepare row based on headers
-          const updatedRow = normalizedHeaders.map(header => {
+          // Prepare row based on headers, preserving existing values for unknown columns
+          const updatedRow = normalizedHeaders.map((header, i) => {
             if (header === 'id') return id;
             if (header === 'title') return title;
             if (header === 'description') return description || "";
@@ -1287,7 +1504,7 @@ async function startServer() {
             if (header === 'color') return color;
             if (header === 'companions') return companions || "";
             if (header === 'important' || header === '重要') return is_important ? "是" : "";
-            return "";
+            return currentRow[i] || "";
           });
 
           // If mapping failed, use default order
@@ -1301,9 +1518,15 @@ async function startServer() {
               values: [finalRow],
             },
           });
-          clearEventsCache();
-          checkAndSendSameDayNotification(eventData, false);
-          return res.json({ success: true, source: "google_sheets_api", sheet: targetSheet });
+        clearEventsCache();
+        updateWriteBuffer(id, { ...eventData, is_important: !!is_important });
+        checkAndSendSameDayNotification(eventData, false);
+        return res.json({ 
+          success: true, 
+          source: "google_sheets_api", 
+          sheet: targetSheet,
+          event: { ...eventData, id, is_important: !!is_important }
+        });
         }
       } catch (error: any) {
         console.error("Google Sheets API Update Error:", error.message);
@@ -1389,18 +1612,23 @@ async function startServer() {
           if (db_local) {
             const stmt = db_local.prepare(`
               UPDATE events 
-              SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?
+              SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?, is_important = ?
               WHERE uuid = ? OR id = ?
             `);
-            stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
+            stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", is_important ? 1 : 0, id, id);
           }
         } catch (e) {
           console.error("SQLite Update Error (Sync):", e);
         }
         
         clearEventsCache();
+        updateWriteBuffer(id, { ...eventData, is_important: !!is_important });
         checkAndSendSameDayNotification(eventData, false);
-        return res.json({ success: true, source: "google_apps_script" });
+        return res.json({ 
+          success: true, 
+          source: "google_apps_script",
+          event: { ...eventData, id, is_important: !!is_important }
+        });
       } catch (error: any) {
         if (error.message && error.message.startsWith('NOT_FOUND:')) {
           console.log(`ℹ️ Apps Script Update: ${error.message.replace('NOT_FOUND:', '')}. Falling back to SQLite.`);
@@ -1417,14 +1645,20 @@ async function startServer() {
       if (db_local) {
         const stmt = db_local.prepare(`
           UPDATE events 
-          SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?
+          SET title = ?, description = ?, start_date = ?, end_date = ?, time = ?, member_name = ?, color = ?, companions = ?, is_important = ?
           WHERE uuid = ? OR id = ?
         `);
-        const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", id, id);
+        const result = stmt.run(title, description || "", start_date, end_date, time || "", member_name, color, companions || "", is_important ? 1 : 0, id, id);
         if (result.changes > 0) {
           clearEventsCache();
+          updateWriteBuffer(id, { ...eventData, is_important: !!is_important });
           checkAndSendSameDayNotification(eventData, false);
-          res.json({ success: true, source: "local", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
+          res.json({ 
+            success: true, 
+            source: "local", 
+            warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined,
+            event: { ...eventData, id, is_important: !!is_important }
+          });
         } else {
           res.status(404).json({ error: "Event not found", warning: typeof appsScriptUpdateWarning !== 'undefined' ? appsScriptUpdateWarning : undefined });
         }
