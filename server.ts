@@ -66,7 +66,14 @@ if (lineConfig.channelAccessToken && lineConfig.channelSecret) {
 
 async function sendLineNotification(message: string) {
   const groupId = process.env.LINE_GROUP_ID;
-  if (!lineClient || !groupId) return;
+  if (!lineClient) {
+    console.error("❌ LINE notification failed: lineClient is not initialized.");
+    return;
+  }
+  if (!groupId) {
+    console.error("❌ LINE notification failed: LINE_GROUP_ID is missing in environment variables.");
+    return;
+  }
   try {
     await lineClient.pushMessage(groupId, { type: 'text', text: message });
     console.log("✅ LINE notification sent");
@@ -266,6 +273,11 @@ async function startServer() {
   // API: Daily Push (Cron)
   app.get("/api/cron/daily-push", async (req, res) => {
     try {
+      const groupId = process.env.LINE_GROUP_ID;
+      if (!groupId) {
+        return res.json({ success: false, message: "⚠️ 缺少 LINE_GROUP_ID 環境變數。系統不知道推播要傳到哪個群組去！請先將機器人邀請至群組，複製紀錄的 ID 並設定到環境變數中。" });
+      }
+
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
       
