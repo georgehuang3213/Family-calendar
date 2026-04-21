@@ -279,7 +279,7 @@ async function startServer() {
       const todaysEvents = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
 
       const [weather, holiday] = await Promise.all([getTodayWeather(), getTodayHoliday(parseInt(yyyy), todayStr)]);
-      if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
+      // if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
 
       let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
       if (holiday) msg += `🎈 節日：${holiday}\n`;
