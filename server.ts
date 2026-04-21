@@ -7,6 +7,7 @@ import { middleware, Client, WebhookEvent } from '@line/bot-sdk';
 import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from "fs";
+import cron from "node-cron";
 
 dotenv.config();
 
@@ -548,6 +549,23 @@ async function startServer() {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
+
+  // --- Internal Cron Setup ---
+  // Note: These will only run while the container/server is awake. In Serverless environments,
+  // containers may sleep after inactivity.
+  cron.schedule('0 8 * * *', async () => {
+    console.log("⏰ Running internal daily push cron...");
+    try {
+      await axios.get(`http://localhost:${PORT}/api/cron/daily-push`);
+    } catch(e: any) { console.error("Cron daily push failed:", e.message); }
+  }, { timezone: 'Asia/Taipei' });
+
+  cron.schedule('*/5 * * * *', async () => {
+    console.log("⏰ Running internal hourly reminder cron...");
+    try {
+      await axios.get(`http://localhost:${PORT}/api/cron/hourly-reminder`);
+    } catch(e: any) { console.error("Cron hourly reminder failed:", e.message); }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
