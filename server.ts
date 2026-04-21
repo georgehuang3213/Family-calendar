@@ -229,12 +229,8 @@ async function startServer() {
       const eventData = { ...req.body, id, createdAt: FieldValue.serverTimestamp() };
       await database.collection('events').doc(id).set(eventData);
       
-      const today = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-      if (eventData.start_date === today) {
-          let msg = `⏰ 【新行程通知】${eventData.member_name} 新增了行程：\n📌 ${eventData.title}`;
-          if (eventData.time) msg += `\n🕒 時間：${eventData.time}`;
-          sendLineNotification(msg);
-      }
+      // 為了節省 LINE 的免費 Push 額度，我們取消「新增今日行程就推播」的功能
+      // 只保留每日早上的總結推播，以及 1 小時前的重要提醒
       res.json({ success: true, id, event: eventData });
     } catch (error: any) {
       console.error("❌ POST /api/events Error:", error);
