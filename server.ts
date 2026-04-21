@@ -553,7 +553,7 @@ async function startServer() {
   // --- Internal Cron Setup ---
   // Note: These will only run while the container/server is awake. In Serverless environments,
   // containers may sleep after inactivity.
-  cron.schedule('0 8 * * *', async () => {
+  cron.schedule('0 7 * * *', async () => {
     console.log("⏰ Running internal daily push cron...");
     try {
       await axios.get(`http://localhost:${PORT}/api/cron/daily-push`);
