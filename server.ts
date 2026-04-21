@@ -67,18 +67,18 @@ if (lineConfig.channelAccessToken && lineConfig.channelSecret) {
 async function sendLineNotification(message: string) {
   const groupId = process.env.LINE_GROUP_ID;
   if (!lineClient) {
-    console.error("❌ LINE notification failed: lineClient is not initialized.");
-    return;
+    throw new Error("lineClient 尚未初始化，請檢查 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
   }
   if (!groupId) {
-    console.error("❌ LINE notification failed: LINE_GROUP_ID is missing in environment variables.");
-    return;
+    throw new Error("環境變數中缺少 LINE_GROUP_ID");
   }
   try {
     await lineClient.pushMessage(groupId, { type: 'text', text: message });
     console.log("✅ LINE notification sent");
   } catch (err: any) {
-    console.error("❌ LINE notification failed:", err.message);
+    console.error("❌ LINE notification failed:", err.originalError?.response?.data || err.message);
+    const detail = err.originalError?.response?.data?.message || err.message;
+    throw new Error(`LINE 推播被拒絕: ${detail} (請檢查 LINE_GROUP_ID 是否正確，以 C/U/R 開頭，且機器人沒有被踢出群組)`);
   }
 }
 
