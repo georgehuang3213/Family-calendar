@@ -91,9 +91,15 @@ async function getTodayWeather() {
     const weatherCode = response.data.current.weather_code;
     const temp = response.data.current.temperature_2m;
     const descriptions: Record<number, string> = {
-        0: '晴朗', 1: '晴時多雲', 2: '多雲', 3: '陰天', 45: '霧', 51: '毛毛雨', 61: '小雨', 71: '小雪', 80: '陣雨', 95: '雷陣雨'
+        0: '晴朗', 1: '晴時多雲', 2: '多雲', 3: '陰天', 
+        45: '霧', 48: '濃霧', 
+        51: '毛毛雨 (輕)', 53: '毛毛雨 (中)', 55: '毛毛雨 (強)', 56: '凍毛毛雨', 57: '強凍毛毛雨', 
+        61: '小雨', 63: '中雨', 65: '大雨', 66: '凍雨', 67: '強凍雨', 
+        71: '小雪', 73: '中雪', 75: '大雪', 77: '雪粒', 
+        80: '陣雨', 81: '強陣雨', 82: '暴雨', 85: '陣雪', 86: '強陣雪', 
+        95: '雷陣雨', 96: '雷陣雨伴隨冰雹', 99: '強雷陣雨伴隨冰雹'
     };
-    return `${descriptions[weatherCode] || '未知'}，氣溫 ${temp}°C`;
+    return `${descriptions[weatherCode] || '未知 (代碼:' + weatherCode + ')'}，氣溫 ${temp}°C`;
   } catch (e) {
     return null;
   }
