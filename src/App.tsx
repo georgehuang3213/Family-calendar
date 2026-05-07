@@ -563,9 +563,9 @@ export default function App() {
 
   const fetchWeather = async () => {
     try {
-      // Default to Taichung coordinates
-      const lat = 24.1477;
-      const lon = 120.6736;
+      // Default to Taichung Beitun District coordinates
+      const lat = 24.1800;
+      const lon = 120.6970;
       const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`);
       if (!response.ok) return;
       const text = await response.text();
@@ -1385,7 +1385,7 @@ export default function App() {
                   <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
                     <MapPin size={16} />
                   </div>
-                  <span className="text-sm font-bold tracking-wide">台中市 (Taichung)</span>
+                  <span className="text-sm font-bold tracking-wide">台中市 北屯區</span>
                 </div>
                 <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
                   即時天氣

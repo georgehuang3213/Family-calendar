@@ -85,8 +85,8 @@ async function sendLineNotification(message: string) {
 // --- Helper Functions ---
 async function getTodayWeather() {
   try {
-    const lat = 24.1477; // Taichung
-    const lon = 120.6736;
+    const lat = 24.1800; // Taichung Beitun District
+    const lon = 120.6970;
     const response = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FTaipei`, { timeout: 8000 });
     const weatherCode = response.data.current.weather_code;
     const temp = response.data.current.temperature_2m;
