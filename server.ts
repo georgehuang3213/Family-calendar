@@ -83,27 +83,30 @@ async function sendLineNotification(message: string) {
 }
 
 // --- Helper Functions ---
-async function getTodayWeather() {
+async function getTodayWeather(overrideLat?: number, overrideLon?: number, overrideLocationName?: string) {
   try {
-    let lat = 24.1800; // Default Taichung Beitun District
-    let lon = 120.6970;
-    let locationName = '';
+    let lat = overrideLat || 24.1800; // Default Taichung Beitun District
+    let lon = overrideLon || 120.6970;
+    let locationName = overrideLocationName ? ` (${overrideLocationName})` : '';
     
-    try {
-      const database = getDb();
-      if (database) {
-        const doc = await database.collection('system_config').doc('weather').get();
-        if (doc.exists) {
-          const data = doc.data();
-          if (data?.lat && data?.lon) {
-            lat = data.lat;
-            lon = data.lon;
-            locationName = data.locationName ? ` (${data.locationName})` : '';
+    // Only fetch from DB if no override is provided
+    if (!overrideLat && !overrideLon) {
+      try {
+        const database = getDb();
+        if (database) {
+          const doc = await database.collection('system_config').doc('weather').get();
+          if (doc.exists) {
+            const data = doc.data();
+            if (data?.lat && data?.lon) {
+              lat = data.lat;
+              lon = data.lon;
+              locationName = data.locationName ? ` (${data.locationName})` : '';
+            }
           }
         }
+      } catch (dbErr) {
+        console.log('Could not fetch weather config from DB, using default location.');
       }
-    } catch (dbErr) {
-      console.log('Could not fetch weather config from DB, using default location.');
     }
 
     const response = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FTaipei`, { timeout: 8000 });
@@ -414,6 +417,21 @@ async function startServer() {
         type: 'text', 
         text: `機器人已就位！\n目前的群組/聊天 ID 是：\n${id}\n\n請將此 ID 設定至環境變數 LINE_GROUP_ID 以啟用推播功能。` 
       });
+    }
+
+    if (event.type === 'message' && event.message.type === 'location') {
+      const locationMessage = event.message as any;
+      console.log(`📍 Received location message: ${locationMessage.latitude}, ${locationMessage.longitude}`);
+      
+      const weather = await getTodayWeather(locationMessage.latitude, locationMessage.longitude, locationMessage.address || locationMessage.title);
+      const tz = "Asia/Taipei";
+      const todayStr = new Date(new Date().toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("en-CA").replace(/\//g, '-');
+      const holiday = await getTodayHoliday(new Date().getFullYear(), todayStr);
+      
+      let msg = `📍 您所在的位置 (${locationMessage.address || "未知地點"})\n⛅ 目前氣象狀況：\n${weather || '暫時無法取得天氣資訊'}`;
+      if (holiday) msg += `\n\n🏮 今日節慶：${holiday}`;
+      
+      return lineClient.replyMessage(event.replyToken, { type: 'text', text: msg });
     }
 
     if (event.type === 'message' && event.message.type === 'text') {
