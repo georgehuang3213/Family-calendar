@@ -59,7 +59,9 @@ import {
   Wind,
   Thermometer,
   MapPin,
-  Megaphone
+  Megaphone,
+  Sparkles,
+  Send
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -254,6 +256,74 @@ export default function App() {
   const [locationName, setLocationName] = useState<string>('台中市 北屯區');
   const [dynamicHolidays, setDynamicHolidays] = useState<Record<string, string>>({});
   const [makeupWorkdays, setMakeupWorkdays] = useState<Record<string, string>>({});
+
+  // ChatGPT AI Assistant States
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant' | 'system', content: string }[]>([
+    { role: 'assistant', content: '您好！我是您的 ChatGPT 智慧小幫手。🙋‍♂️✨\n您可以問我任何問題、請我幫忙查詢行程、或者是直接命令我幫您進行行事曆排程！\n\n💡 *您可以試著這樣對我說*：\n1. 「幫我查下星期江雪卿哪天排休？」\n2. 「幫黃喬裕新增明天上午十點開會，備註是在會議室」\n3. 「下星期全家有什麼行程？」\n\n我會自動讀取最新的資料庫，並直接幫您在雲端行事曆做排定與操作喔！😊' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isAILoading, setIsAILoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll to bottom of chat
+  useEffect(() => {
+    if (isChatOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatOpen]);
+
+  const handleSendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || isAILoading) return;
+
+    const userMsg = chatInput.trim();
+    setChatInput('');
+    
+    // Add user message to state
+    const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
+    setChatMessages(updatedMessages);
+    setIsAILoading(true);
+
+    try {
+      const historyToSend = updatedMessages
+        .slice(-6) // Limit chat context to keep responses fast and robust
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: userMsg,
+          history: historyToSend
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`伺服器連線失敗：狀態 ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        setChatMessages(prev => [...prev, { role: 'assistant' as const, content: data.reply }]);
+        if (data.actionExecuted) {
+          showToast(data.actionExecuted, 'success');
+        }
+      } else {
+        throw new Error(data.error || '未知的 AI 回應錯誤');
+      }
+    } catch (err: any) {
+      console.error("AI Chat Error:", err);
+      setChatMessages(prev => [...prev, { 
+        role: 'assistant' as const, 
+        content: `❌ 抱歉，我現在大腦有一點卡住了：${err.message}\n金鑰剛設定時，通常需要重啟或等待一分鐘生效 😉` 
+      }]);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
 
   useEffect(() => {
     if (isDarkMode) {
@@ -2682,10 +2752,119 @@ export default function App() {
         </div>
       )}
 
+      {/* ChatGPT Floating Assistant */}
+      <div className="fixed bottom-24 md:bottom-6 right-6 z-40">
+        {/* Glow/Pulse background for notification */}
+        {!isChatOpen && (
+          <button 
+            id="ai-assistant-toggle"
+            onClick={() => setIsChatOpen(true)}
+            className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all relative border-2 border-white/25 hover:shadow-indigo-500/20 cursor-pointer"
+            title="開啟 AI 智慧小幫手"
+          >
+            <Sparkles size={24} className="animate-pulse" />
+            <span className="absolute -top-1 -right-1 bg-rose-600 text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">
+              AI
+            </span>
+          </button>
+        )}
+
+        {/* Chat Drawer/Panel */}
+        {isChatOpen && (
+          <div className="w-[calc(100vw-32px)] sm:w-[380px] h-[480px] bg-white dark:bg-stone-900 border border-stone-250 dark:border-stone-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-4 py-3.5 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-indigo-100" />
+                <div className="flex flex-col select-none">
+                  <span className="font-black text-sm tracking-tight leading-tight">AI 家庭小秘書</span>
+                  <div className="flex items-center gap-1">
+                    <span className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      configStatus?.openai ? "bg-emerald-400 animate-pulse" : "bg-stone-400"
+                    )} />
+                    <span className="text-[9px] text-indigo-100/80 font-bold tracking-wider">
+                      {configStatus?.openai ? "ChatGPT 智慧模組" : "未設定金鑰"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsChatOpen(false)}
+                className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-full transition-colors text-white cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50 dark:bg-stone-955/65 scrollbar-thin">
+              {chatMessages.map((msg, i) => (
+                <div 
+                  key={i} 
+                  className={cn(
+                    "flex flex-col max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed shadow-sm",
+                    msg.role === 'user' 
+                      ? "bg-indigo-600 text-white ml-auto rounded-tr-none" 
+                      : "bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-tl-none border border-stone-200/50 dark:border-stone-700/55 whitespace-pre-wrap"
+                  )}
+                >
+                  {msg.content}
+                </div>
+              ))}
+              {isAILoading && (
+                <div className="bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200/50 dark:border-stone-700/55 rounded-2xl rounded-tl-none p-3 text-xs w-[120px] shadow-sm flex items-center gap-2 select-none">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="font-bold">思考中...</span>
+                </div>
+              )}
+              {/* Warning when API key is missing */}
+              {!configStatus?.openai && (
+                <div className="bg-amber-50 dark:bg-amber-950/45 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-3.5 text-xs text-amber-800 dark:text-amber-300">
+                  <div className="flex gap-2 items-start font-bold">
+                    <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-black mb-1">⚠️ 需要設定 ChatGPT API 金鑰</p>
+                      <p className="font-medium text-[11px] leading-normal opacity-90">
+                        目前尚未設定 OpenAI 金鑰。請在 AI Studio 專案的 <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded font-black text-amber-700 dark:text-amber-400">Settings</span> 頁面，點選 Secrets 新增一個變數名稱為 <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded font-mono font-black text-amber-700 dark:text-amber-400">OPENAI_API_KEY</span> 的金鑰，並填入您的 OpenAI 密鑰，即可解鎖 ChatGPT AI 小秘書！
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input Footer */}
+            <form onSubmit={handleSendChatMessage} className="bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 p-3 flex items-center gap-2">
+              <input 
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={isAILoading || !configStatus?.openai}
+                placeholder={configStatus?.openai ? "請輸入指令查詢或幫我排程..." : "請先完成 Secrets 金鑰設定"}
+                className="flex-1 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 px-3.5 py-2.5 rounded-2xl text-xs font-bold outline-none border border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-stone-800 transition-all disabled:opacity-50"
+              />
+              <button 
+                type="submit"
+                disabled={!chatInput.trim() || isAILoading || !configStatus?.openai}
+                className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100 flex-shrink-0 cursor-pointer"
+              >
+                <Send size={15} />
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+
       {loading && (
-        <div className="fixed bottom-24 md:bottom-6 right-6 bg-white px-4 py-2 rounded-full shadow-lg border border-stone-100 flex items-center gap-2 animate-pulse z-20">
+        <div className="fixed bottom-24 md:bottom-6 right-24 md:right-24 bg-white dark:bg-stone-800 px-4 py-2 rounded-full shadow-lg border border-stone-100 dark:border-stone-700 flex items-center gap-2 animate-pulse z-20">
           <Clock size={16} className="text-indigo-600 animate-spin" />
-          <span className="text-xs font-bold text-stone-600 uppercase tracking-wider">同步中</span>
+          <span className="text-xs font-bold text-stone-600 dark:text-stone-400 uppercase tracking-wider">同步中</span>
         </div>
       )}
     </div>

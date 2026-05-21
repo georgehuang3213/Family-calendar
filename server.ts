@@ -8,6 +8,7 @@ import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from "fs";
 import cron from "node-cron";
+import { askChatGPT } from "./gptService.js";
 
 dotenv.config();
 
@@ -230,8 +231,26 @@ async function startServer() {
     res.json({
       firebase: !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
       line: !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID),
+      openai: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "YOUR_OPENAI_API_KEY_HERE"),
       google: false
     });
+  });
+
+  // API: AI Chat using ChatGPT
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { message, history } = req.body;
+      if (!message) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+      
+      const currentYear = new Date().getFullYear();
+      const response = await askChatGPT(message, history || [], currentYear);
+      res.json({ success: true, reply: response.reply, actionExecuted: response.actionExecuted });
+    } catch (e: any) {
+      console.error("❌ POST /api/ai/chat Error:", e);
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // API: Save Weather Location
@@ -608,8 +627,47 @@ async function startServer() {
                 '5. 「重要行程」：查看所有標記為重要的活動\n' +
                 '6. 「天氣」：看目前天氣與節慶\n' +
                 '7. 「id」：取得對話 ID\n' +
-                '8. 「幫助」：顯示此說明' 
+                '8. 「智慧助理」：輸入「AI 幫我查下週誰排休」或點擊私聊進行 AI 智慧排程與對話\n' +
+                '9. 「幫助」：顯示此說明' 
         });
+      }
+
+      // --- ChatGPT 智慧對話＆排程功能 ---
+      const lowercaseText = text.toLowerCase();
+      const isGroup = event.source.type === 'group';
+      let shouldTriggerChatGPT = false;
+      let queryQuery = text;
+
+      // 支援特定的觸發詞開頭 (不論大小寫、全半形)
+      const triggers = ['ai ', 'ai:', 'ai：', 'gpt ', 'gpt:', 'gpt：', '詢問 ', '機器人', '小幫手'];
+      for (const t of triggers) {
+        if (lowercaseText.startsWith(t)) {
+          shouldTriggerChatGPT = true;
+          queryQuery = text.substring(t.length).trim();
+          break;
+        }
+      }
+
+      // 如果是在個人 1-對-1 私訊中，且前面完全沒有匹配到任何固定指令，那就全都當作和 ChatGPT 聊天
+      if (!isGroup) {
+        shouldTriggerChatGPT = true;
+      }
+
+      if (shouldTriggerChatGPT && queryQuery.length > 0) {
+        try {
+          console.log(`🤖 Invoking ChatGPT translation for LINE user prompt: "${queryQuery}"`);
+          const gptResponse = await askChatGPT(queryQuery, [], new Date().getFullYear());
+          return lineClient.replyMessage(event.replyToken, { 
+            type: 'text', 
+            text: gptResponse.reply 
+          });
+        } catch (gptErr: any) {
+          console.error("❌ LINE ChatGPT invocation failed:", gptErr.message);
+          return lineClient.replyMessage(event.replyToken, { 
+            type: 'text', 
+            text: `⚠️ ChatGPT 模組暫時無法回應，請確認設定：${gptErr.message}` 
+          });
+        }
       }
     }
   }
