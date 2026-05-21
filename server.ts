@@ -332,7 +332,9 @@ async function startServer() {
       // if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
 
       let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
-      if (holiday) msg += `🎈 節日：${holiday}\n`;
+      if (holiday) {
+        msg = `🎉 【特別節日告知】\n今天是「${holiday}」！祝大家節日快樂！\n────────────────\n` + msg;
+      }
       if (weather) msg += `⛅ 天氣：${weather}\n\n`;
 
       if (todaysEvents.length > 0) {
@@ -549,6 +551,14 @@ async function startServer() {
 
           let msg = "";
           
+          if (!isRange && targetDate.toISOString().split('T')[0] === nowStr) {
+            const currentYYYY = new Date().getFullYear();
+            const holiday = await getTodayHoliday(currentYYYY, nowStr);
+            if (holiday) {
+              msg += `🎉 【特別節日告知】\n今天是「${holiday}」！祝大家節日快樂！\n────────────────\n`;
+            }
+          }
+
           // 如果有重要行程且不是在查特定人
           if (importantEvents.length > 0 && !filterMember) {
             msg += `🌟 【置頂重要公告】\n`;
