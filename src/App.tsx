@@ -251,6 +251,7 @@ export default function App() {
   });
   const [weatherData, setWeatherData] = useState<any>(null);
   const [currentWeather, setCurrentWeather] = useState<any>(null);
+  const [locationName, setLocationName] = useState<string>('台中市 北屯區');
   const [dynamicHolidays, setDynamicHolidays] = useState<Record<string, string>>({});
   const [makeupWorkdays, setMakeupWorkdays] = useState<Record<string, string>>({});
 
@@ -510,7 +511,44 @@ export default function App() {
 
   useEffect(() => {
     // 1. Fetch static resources (Weather, Holidays)
-    fetchWeather();
+    const initLocationAndWeather = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+              const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=zh`);
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                const city = geoData.city || geoData.principalSubdivision || '未知地區';
+                const locality = geoData.locality || '';
+                const locName = `${city} ${locality}`.trim();
+                setLocationName(locName);
+                
+                // Save it back to server so the LINE morning pushing uses it
+                fetch('/api/config/weather', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ lat: latitude, lon: longitude, locationName: locName })
+                }).catch(e => console.error(e));
+              }
+            } catch (e) {
+              console.error('Reverse geocode error', e);
+            }
+            fetchWeather(latitude, longitude);
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            fetchWeather(); // Fallback
+          },
+          { timeout: 10000, maximumAge: 60000 }
+        );
+      } else {
+        fetchWeather(); // Fallback
+      }
+    };
+    initLocationAndWeather();
+
     fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
 
@@ -561,11 +599,11 @@ export default function App() {
     fetchHolidays(currentDate.getFullYear());
   }, [currentDate.getFullYear()]);
 
-  const fetchWeather = async () => {
+  const fetchWeather = async (targetLat?: number, targetLon?: number) => {
     try {
-      // Default to Taichung Beitun District coordinates
-      const lat = 24.1800;
-      const lon = 120.6970;
+      // Default to Taichung Beitun District coordinates if not provided
+      const lat = targetLat ?? 24.1800;
+      const lon = targetLon ?? 120.6970;
       const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`);
       if (!response.ok) return;
       const text = await response.text();
@@ -1385,7 +1423,7 @@ export default function App() {
                   <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
                     <MapPin size={16} />
                   </div>
-                  <span className="text-sm font-bold tracking-wide">台中市 北屯區</span>
+                  <span className="text-sm font-bold tracking-wide">{locationName}</span>
                 </div>
                 <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
                   即時天氣

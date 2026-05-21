@@ -85,8 +85,27 @@ async function sendLineNotification(message: string) {
 // --- Helper Functions ---
 async function getTodayWeather() {
   try {
-    const lat = 24.1800; // Taichung Beitun District
-    const lon = 120.6970;
+    let lat = 24.1800; // Default Taichung Beitun District
+    let lon = 120.6970;
+    let locationName = '';
+    
+    try {
+      const database = getDb();
+      if (database) {
+        const doc = await database.collection('system_config').doc('weather').get();
+        if (doc.exists) {
+          const data = doc.data();
+          if (data?.lat && data?.lon) {
+            lat = data.lat;
+            lon = data.lon;
+            locationName = data.locationName ? ` (${data.locationName})` : '';
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.log('Could not fetch weather config from DB, using default location.');
+    }
+
     const response = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FTaipei`, { timeout: 8000 });
     const weatherCode = response.data.current.weather_code;
     const temp = response.data.current.temperature_2m;
@@ -99,7 +118,7 @@ async function getTodayWeather() {
         80: '陣雨', 81: '強陣雨', 82: '暴雨', 85: '陣雪', 86: '強陣雪', 
         95: '雷陣雨', 96: '雷陣雨伴隨冰雹', 99: '強雷陣雨伴隨冰雹'
     };
-    return `${descriptions[weatherCode] || '未知 (代碼:' + weatherCode + ')'}，氣溫 ${temp}°C`;
+    return `${descriptions[weatherCode] || '未知 (代碼:' + weatherCode + ')'}，氣溫 ${temp}°C${locationName}`;
   } catch (e) {
     return null;
   }
@@ -210,6 +229,20 @@ async function startServer() {
       line: !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID),
       google: false
     });
+  });
+
+  // API: Save Weather Location
+  app.post("/api/config/weather", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      const { lat, lon, locationName } = req.body;
+      await database.collection('system_config').doc('weather').set({ lat, lon, locationName }, { merge: true });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ POST /api/config/weather Error:", error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // API: Get Events

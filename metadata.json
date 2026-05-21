@@ -1,5 +1,6 @@
 {
   "name": "家庭活動行事曆",
   "description": "家庭成員活動同步行事曆，方便追蹤與同步行程。",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
