@@ -2,6 +2,8 @@ import axios from "axios";
 import OpenAI from "openai";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
+import path from "path";
 
 const FAMILY_MEMBERS = ['全家', '江雪卿', '黃喬裕', '陳愉婷', '黃宣綾', '黃宣綸', '黃郁婷', '郭力維', '黃郁慈', '郭品佑', '郭品彤'];
 
@@ -24,16 +26,29 @@ export interface ChatMessage {
   content: string;
 }
 
+import { getApps } from "firebase-admin/app";
+
 /**
  * Lazy-retrieve Firebase DB instance safely
  */
 function getDb() {
   try {
-    const admin = require("firebase-admin");
-    const apps = admin.apps;
-    if (apps.length > 0) {
+    if (getApps().length > 0) {
       // Just check if we can get Firestore
-      const db = getFirestore();
+      // Read the databaseId from config if it exists
+      let databaseId = "(default)";
+      try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          if (config.databaseId) {
+            databaseId = config.databaseId;
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ Could not read firebase config in gptService");
+      }
+      const db = getFirestore(databaseId);
       return db;
     }
   } catch (e) {
@@ -189,7 +204,7 @@ export async function askChatGPT(
 - 今天本地日期是：${todayStr} (星期${["日", "一", "二", "三", "四", "五", "六"][todayDate.getDay()]})
 - 今年年份是：${currentYearNum}
 - 家庭成員名單（請只能設定給這幾位成員）：${FAMILY_MEMBERS.join(", ")}
-  （如果成員的名字不在裡面，請禮貌地告知，並詢問要設定給哪一個家庭成員。'全家'也是合法的對象）
+  （如果成員的名字不在裡面，請禮貌地告知，並詢問要設定給哪一個家庭成員。'全家'也是合法的對象。注意：若是語音辨識造成的同音錯字（如喬玉->黃喬裕、宣倫->黃宣綸），請自動進行模糊比對並修正為正確的成員名稱）
 
 ${calendarContext}
 
@@ -296,7 +311,8 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
     const response = await openai.audio.transcriptions.create({
       file: file as any,
       model: "whisper-1",
-      language: "zh"
+      language: "zh",
+      prompt: "家庭成員名單：" + FAMILY_MEMBERS.join("，")
     });
     return response.text;
   } catch (error: any) {
