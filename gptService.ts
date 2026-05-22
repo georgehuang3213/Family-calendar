@@ -1,4 +1,5 @@
 import axios from "axios";
+import OpenAI from "openai";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { v4 as uuidv4 } from "uuid";
 
@@ -288,33 +289,16 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
     throw new Error("⚠️ 系統尚未設定 ChatGPT API 金鑰，無法辨識語音。");
   }
 
+  const openai = new OpenAI({ apiKey });
+
   try {
-    const formData = new FormData();
-    if (typeof File !== 'undefined') {
-      const file = new File([audioBuffer], 'audio.m4a', { type: 'audio/m4a' });
-      formData.append('file', file);
-    } else {
-      const blob = new Blob([audioBuffer], { type: 'audio/m4a' });
-      formData.append('file', blob, 'audio.m4a');
-    }
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'zh');
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: "POST",
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: formData
+    const file = await OpenAI.toFile(audioBuffer, "audio.m4a");
+    const response = await openai.audio.transcriptions.create({
+      file: file as any,
+      model: "whisper-1",
+      language: "zh"
     });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Whisper Error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as any;
-    return data.text;
+    return response.text;
   } catch (error: any) {
     console.error("❌ transcribeAudio Error:", error.message);
     throw new Error(`語音辨識失敗: ${error.message}`);
