@@ -8,7 +8,7 @@ import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from "fs";
 import cron from "node-cron";
-import { askChatGPT } from "./gptService.js";
+import { askChatGPT, transcribeAudio } from "./gptService.js";
 
 dotenv.config();
 
@@ -668,6 +668,41 @@ async function startServer() {
             text: `⚠️ ChatGPT 模組暫時無法回應，請確認設定：${gptErr.message}` 
           });
         }
+      }
+    }
+
+    if (event.type === 'message' && event.message.type === 'audio') {
+      try {
+        console.log(`🎤 Received audio message.`);
+        const stream = await lineClient.getMessageContent(event.message.id);
+        const chunks: any[] = [];
+        for await (const chunk of stream as any) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        const text = await transcribeAudio(buffer);
+        console.log(`🎤 Transcribed audio text: "${text}"`);
+
+        if (text && text.trim().length > 0) {
+           const gptResponse = await askChatGPT(text, [], new Date().getFullYear());
+           let prefix = `【語音】：${text}\n─────────\n`;
+           return lineClient.replyMessage(event.replyToken, { 
+             type: 'text', 
+             text: prefix + gptResponse.reply 
+           });
+        } else {
+           return lineClient.replyMessage(event.replyToken, { 
+             type: 'text', 
+             text: `⚠️ 無法從語音中辨識到文字內容。` 
+           });
+        }
+      } catch (err: any) {
+        console.error("❌ LINE Audio processing failed:", err.message);
+        return lineClient.replyMessage(event.replyToken, { 
+          type: 'text', 
+          text: `⚠️ 處理語音時發生錯誤：${err.message}` 
+        });
       }
     }
   }

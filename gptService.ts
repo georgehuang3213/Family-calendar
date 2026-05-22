@@ -278,3 +278,41 @@ ${calendarContext}
     };
   }
 }
+
+/**
+ * Transcribe Audio using OpenAI Whisper
+ */
+export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || apiKey.trim() === "" || apiKey === "YOUR_OPENAI_API_KEY_HERE") {
+    throw new Error("⚠️ 系統尚未設定 ChatGPT API 金鑰，無法辨識語音。");
+  }
+
+  try {
+    const formData = new FormData();
+    // Wrap the buffer in a Blob/File
+    const blob = new Blob([audioBuffer], { type: 'audio/m4a' });
+    formData.append('file', Object.assign(blob, { name: 'audio.m4a' }), 'audio.m4a');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'zh');
+
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: formData as any,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Whisper Error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.text;
+  } catch (error: any) {
+    console.error("❌ transcribeAudio Error:", error.message);
+    throw new Error(`語音辨識失敗: ${error.message}`);
+  }
+}
