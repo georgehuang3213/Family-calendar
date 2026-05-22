@@ -38,8 +38,8 @@ function getDb() {
       const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (config.databaseId) {
-          databaseId = config.databaseId;
+        if (config.firestoreDatabaseId) {
+          databaseId = config.firestoreDatabaseId;
         }
       }
     } catch (e) {
