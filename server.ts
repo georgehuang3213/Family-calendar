@@ -219,7 +219,7 @@ async function startServer() {
         return res.json({ success: true, warning: 'no_events' });
       }
       logToDebugFile(`📦 Received ${events.length} LINE events: ${JSON.stringify(events)}`);
-      Promise.all(events.map(handleLineEvent)).catch(err => {
+      await Promise.all(events.map(handleLineEvent)).catch(err => {
         logToDebugFile(`❌ Async line event error: ${err.message}`);
         console.error("❌ Async line event error:", err);
       });

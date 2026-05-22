@@ -290,8 +290,13 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
   try {
     const formData = new FormData();
-    const file = new File([audioBuffer], 'audio.m4a', { type: 'audio/m4a' });
-    formData.append('file', file);
+    if (typeof File !== 'undefined') {
+      const file = new File([audioBuffer], 'audio.m4a', { type: 'audio/m4a' });
+      formData.append('file', file);
+    } else {
+      const blob = new Blob([audioBuffer], { type: 'audio/m4a' });
+      formData.append('file', blob, 'audio.m4a');
+    }
     formData.append('model', 'whisper-1');
     formData.append('language', 'zh');
 
