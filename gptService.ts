@@ -26,28 +26,37 @@ export interface ChatMessage {
   content: string;
 }
 
-import { getApps } from "firebase-admin/app";
+import { getApps, initializeApp, cert } from "firebase-admin/app";
 
 /**
  * Lazy-retrieve Firebase DB instance safely
  */
 function getDb() {
   try {
+    let databaseId = "(default)";
+    try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (config.databaseId) {
+          databaseId = config.databaseId;
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Could not read firebase config in gptService");
+    }
+
+    if (getApps().length === 0) {
+      const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+      if (serviceAccountKey) {
+        initializeApp({
+          credential: cert(JSON.parse(serviceAccountKey))
+        });
+      }
+    }
+
     if (getApps().length > 0) {
       // Just check if we can get Firestore
-      // Read the databaseId from config if it exists
-      let databaseId = "(default)";
-      try {
-        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-        if (fs.existsSync(configPath)) {
-          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          if (config.databaseId) {
-            databaseId = config.databaseId;
-          }
-        }
-      } catch (e) {
-        console.warn("⚠️ Could not read firebase config in gptService");
-      }
       const db = getFirestore(databaseId);
       return db;
     }
