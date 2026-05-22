@@ -343,7 +343,7 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
       file: file as any,
       model: "whisper-1",
       language: "zh",
-      prompt: "家庭成員名單：" + FAMILY_MEMBERS.join("，")
+      prompt: `這段語音主要關於家庭成員的行程管理與行事曆排班。常出現的字詞有：新增、刪除、查詢、更改、安排、行程、排班、放假。請特別注意以下家庭成員的正確名字寫法：${FAMILY_MEMBERS.join("，")}。請使用繁體中文，並加上適當的標點符號。`
     });
     return response.text;
   } catch (error: any) {
