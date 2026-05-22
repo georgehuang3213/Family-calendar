@@ -12,6 +12,17 @@ import { askChatGPT, transcribeAudio } from "./gptService.js";
 
 dotenv.config();
 
+// --- Debug Logging Setup ---
+export function logToDebugFile(message: string) {
+  try {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(path.join(process.cwd(), "webhook_logs.txt"), `[${timestamp}] ${message}\n`, "utf8");
+    console.log(`📝 [DEBUG LOG] ${message}`);
+  } catch (e) {
+    console.error("Failed to write to debug file:", e);
+  }
+}
+
 // --- Firebase Admin Setup ---
 let db: any;
 function getDb() {
@@ -148,8 +159,39 @@ async function startServer() {
 
   // 1. Logging middleware (Top level)
   app.use((req, res, next) => {
-    if (req.url === "/api/line/webhook") {
-      console.log(`📡 [Incoming Webhook] ${req.method} ${req.url}`);
+    if (req.path === "/api/line/webhook") {
+      const originalSend = res.send;
+      const originalEnd = res.end;
+      const originalStatus = res.status;
+      
+      let resBody = "";
+      let statusCode = 200;
+      
+      res.status = function(code: any) {
+        statusCode = code;
+        return originalStatus.apply(this, arguments as any);
+      };
+      
+      res.send = function(chunk: any) {
+        if (chunk) resBody += chunk.toString();
+        return originalSend.apply(this, arguments as any);
+      };
+      
+      res.end = function(chunk: any) {
+        if (chunk) {
+          if (Buffer.isBuffer(chunk)) {
+            resBody += chunk.toString('utf8');
+          } else if (typeof chunk === 'string') {
+            resBody += chunk;
+          } else {
+            resBody += JSON.stringify(chunk);
+          }
+        }
+        logToDebugFile(`Response ended with status ${statusCode}. Body: ${resBody}`);
+        return originalEnd.apply(this, arguments as any);
+      };
+
+      logToDebugFile(`IncomingWebhook: ${req.method} ${req.path} | Headers: ${JSON.stringify(req.headers)}`);
     }
     next();
   });
@@ -169,15 +211,16 @@ async function startServer() {
     }
     next();
   }, lineMiddleware, async (req, res) => {
-    console.log("📩 LINE Webhook Verified & Received!");
+    logToDebugFile("📩 LINE Webhook Verified & Received!");
     try {
       const events: WebhookEvent[] = req.body.events;
       if (!events || !Array.isArray(events)) {
-        console.warn("⚠️ Received LINE webhook with no events array in body.");
+        logToDebugFile("⚠️ Received LINE webhook with no events array in body.");
         return res.json({ success: true, warning: 'no_events' });
       }
-      console.log(`📦 Received ${events.length} LINE events`);
+      logToDebugFile(`📦 Received ${events.length} LINE events: ${JSON.stringify(events)}`);
       Promise.all(events.map(handleLineEvent)).catch(err => {
+        logToDebugFile(`❌ Async line event error: ${err.message}`);
         console.error("❌ Async line event error:", err);
       });
       res.json({ success: true });
@@ -230,12 +273,70 @@ async function startServer() {
 
   // API: Config Status
   app.get("/api/config-status", (req, res) => {
+    const secret = process.env.LINE_CHANNEL_SECRET || "";
+    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
+    const groupId = process.env.LINE_GROUP_ID || "";
+    const openaiKey = process.env.OPENAI_API_KEY || "";
+    const firebaseKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "";
+
+    let lineSecretWarning = "";
+    if (secret) {
+      if (/^\d+$/.test(secret)) {
+        lineSecretWarning = "⚠️ 警告：您的 LINE_CHANNEL_SECRET 似乎純為數字（可能是誤填成了 Channel ID 囉！真正的 Channel Secret 應該是 32 碼的英文、數字混合字密碼）。";
+      } else if (secret.length !== 32) {
+        lineSecretWarning = `⚠️ 警告：LINE_CHANNEL_SECRET 的長度為 ${secret.length} 碼（一般的 Channel Secret 應該要是 32 碼，請至 LINE Console -> Basic settings 複製真正的 Channel Secret）。`;
+      }
+    }
+
     res.json({
-      firebase: !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
-      line: !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID),
-      openai: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "YOUR_OPENAI_API_KEY_HERE"),
-      google: false
+      firebase: !!firebaseKey,
+      firebaseKeyLength: firebaseKey.length,
+      line: !!(token && groupId),
+      lineAccessToken: !!token,
+      lineAccessTokenLength: token.length,
+      lineChannelSecret: !!secret,
+      lineChannelSecretLength: secret.length,
+      lineSecretWarning: lineSecretWarning || null,
+      lineGroupId: !!groupId,
+      lineGroupIdValue: groupId ? `${groupId.substring(0, 4)}...${groupId.substring(groupId.length - 4)}` : "",
+      openai: !!(openaiKey && openaiKey !== "YOUR_OPENAI_API_KEY_HERE"),
+      openaiKeyLength: openaiKey.length,
+      google: false,
+      env: {
+        VERCEL: !!process.env.VERCEL,
+        NODE_ENV: process.env.NODE_ENV || "development"
+      }
     });
+  });
+
+  // API: Webhook Logs
+  app.get("/api/webhook-logs", (req, res) => {
+    try {
+      const logPath = path.join(process.cwd(), "webhook_logs.txt");
+      if (!fs.existsSync(logPath)) {
+        return res.json({ logs: "目前尚無任何 Webhook 記錄。請先在 LINE 聊天中發送訊息或語音。" });
+      }
+      const contents = fs.readFileSync(logPath, "utf8");
+      // Return last 80 lines to avoid huge responses
+      const lines = contents.trim().split("\n");
+      const last80 = lines.slice(-80).join("\n");
+      res.json({ logs: last80 });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API: Clear Webhook Logs
+  app.post("/api/webhook-logs/clear", (req, res) => {
+    try {
+      const logPath = path.join(process.cwd(), "webhook_logs.txt");
+      if (fs.existsSync(logPath)) {
+        fs.unlinkSync(logPath);
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // API: AI Chat using ChatGPT
@@ -429,6 +530,7 @@ async function startServer() {
 
   async function handleLineEvent(event: WebhookEvent) {
     if (!lineClient) return;
+    logToDebugFile(`handleLineEvent called for event type: ${event.type} | source: ${JSON.stringify(event.source)}`);
     console.log(`🔍 Processing event type: ${event.type}`);
 
     // 加入群組時回傳 ID
@@ -675,32 +777,41 @@ async function startServer() {
 
     if (event.type === 'message' && event.message.type === 'audio') {
       try {
+        logToDebugFile(`🎤 Received audio message with ID: ${event.message.id}`);
         console.log(`🎤 Received audio message.`);
         const stream = await lineClient.getMessageContent(event.message.id) as NodeJS.ReadableStream;
         const buffer = await new Promise<Buffer>((resolve, reject) => {
           const chunks: Buffer[] = [];
           stream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-          stream.on('error', (err: Error) => reject(err));
+          stream.on('error', (err: Error) => {
+            logToDebugFile(`Stream error on getMessageContent: ${err.message}`);
+            reject(err);
+          });
           stream.on('end', () => resolve(Buffer.concat(chunks)));
         });
         
+        logToDebugFile(`Audio buffer retrieved, size: ${buffer.length} bytes`);
         const text = await transcribeAudio(buffer);
+        logToDebugFile(`Transcribed text: "${text}"`);
         console.log(`🎤 Transcribed audio text: "${text}"`);
 
         if (text && text.trim().length > 0) {
            const gptResponse = await askChatGPT(text, [], new Date().getFullYear());
+           logToDebugFile(`GPT Response: "${gptResponse.reply}"`);
            let prefix = `【語音】：${text}\n─────────\n`;
            return lineClient.replyMessage(event.replyToken, { 
              type: 'text', 
              text: prefix + gptResponse.reply 
            });
         } else {
+           logToDebugFile(`Warning: Transcribed text is empty`);
            return lineClient.replyMessage(event.replyToken, { 
              type: 'text', 
              text: `⚠️ 無法從語音中辨識到文字內容。` 
            });
         }
       } catch (err: any) {
+        logToDebugFile(`❌ LINE Audio processing failed: ${err.message} -- ${err.stack}`);
         console.error("❌ LINE Audio processing failed:", err.message);
         return lineClient.replyMessage(event.replyToken, { 
           type: 'text', 

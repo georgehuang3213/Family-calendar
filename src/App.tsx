@@ -231,6 +231,8 @@ export default function App() {
   const [isQuickWorkEnabled, setIsQuickWorkEnabled] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [webhookLogs, setWebhookLogs] = useState<string>('載入中...');
+  const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
   const [eventToDelete, setEventToDelete] = useState<string | number | null>(null);
   const [eventToDeleteObj, setEventToDeleteObj] = useState<Event | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -764,6 +766,41 @@ export default function App() {
       console.error('Failed to fetch config status');
     }
   };
+
+  const fetchWebhookLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetch('/api/webhook-logs');
+      if (res.ok) {
+        const data = await res.json();
+        setWebhookLogs(data.logs);
+      } else {
+        setWebhookLogs('無法讀取日誌，伺服器返回錯誤。');
+      }
+    } catch (err: any) {
+      setWebhookLogs(`載入日誌失敗: ${err.message}`);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const clearWebhookLogs = async () => {
+    if (!window.confirm('確定要清空 Webhook 日誌嗎？')) return;
+    try {
+      const res = await fetch('/api/webhook-logs/clear', { method: 'POST' });
+      if (res.ok) {
+        setWebhookLogs('日誌已清空。');
+      }
+    } catch (err: any) {
+      alert(`清空日誌失敗: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
+    if (showDebug) {
+      fetchWebhookLogs();
+    }
+  }, [showDebug]);
 
   const getLunarDate = useCallback((date: Date) => {
     try {
@@ -1756,6 +1793,148 @@ export default function App() {
                       <p className="text-stone-500">{e.start_date} ~ {e.end_date}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* LINE Webhook Real-time Diagnostic Logs */}
+              <div className="col-span-1 md:col-span-2 bg-stone-800 p-4 rounded-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">
+                    🛰️ LINE Webhook 連結與語音診斷實時日誌
+                  </p>
+                  <div className="flex gap-2 self-start sm:self-auto">
+                    <button 
+                      onClick={fetchWebhookLogs}
+                      disabled={isLoadingLogs}
+                      className="px-2 py-1 text-[10px] bg-indigo-600 hover:bg-indigo-505 disabled:bg-stone-700 text-white rounded transition-colors font-medium"
+                    >
+                      {isLoadingLogs ? '搜尋中...' : '重新整理日誌'}
+                    </button>
+                    <button 
+                      onClick={clearWebhookLogs}
+                      className="px-2 py-1 text-[10px] bg-stone-700 hover:bg-red-650 hover:bg-red-600 text-white rounded transition-colors font-medium"
+                    >
+                      清空日誌
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vercel Environment Variables Status */}
+                {configStatus && (
+                  <div className="mb-4 mt-2 p-3 bg-stone-900 border border-stone-700/50 rounded-lg text-xs space-y-2">
+                    <p className="font-bold text-stone-200">🛰️ Vercel 與伺服器環境變數載入狀態：</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Channel Secret</span>
+                        <div className="flex items-center gap-1.5">
+                          {configStatus.lineChannelSecret ? (
+                            <>
+                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.lineChannelSecretLength} 字元)</span>
+                            </>
+                          ) : (
+                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Access Token</span>
+                        <div className="flex items-center gap-1.5">
+                          {configStatus.lineAccessToken ? (
+                            <>
+                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
+                              <span className="text-stone-400 font-mono text-[9px]">({configStatus.lineAccessTokenLength} 字元)</span>
+                            </>
+                          ) : (
+                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Group ID (群組ID)</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {configStatus.lineGroupId ? (
+                            <>
+                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
+                              <span className="text-indigo-400 font-mono text-[9px] break-all">{configStatus.lineGroupIdValue}</span>
+                            </>
+                          ) : (
+                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">OpenAI API Key (ChatGPT)</span>
+                        <div className="flex items-center gap-1.5">
+                          {configStatus.openai ? (
+                            <>
+                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.openaiKeyLength} 字元)</span>
+                            </>
+                          ) : (
+                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">Firebase DB 連線</span>
+                        <div className="flex items-center gap-1.5">
+                          {configStatus.firebase ? (
+                            <>
+                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.firebaseKeyLength} 字元)</span>
+                            </>
+                          ) : (
+                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-950 p-2 rounded border border-stone-850">
+                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">目前執行端點</span>
+                        <span className="text-indigo-400 font-semibold font-mono text-[10px]">
+                          {configStatus.env?.VERCEL ? "⚡ Vercel Serverless" : "💻 Local/Dev"} ({configStatus.env?.NODE_ENV})
+                        </span>
+                      </div>
+                    </div>
+
+                    {configStatus.lineSecretWarning && (
+                      <div className="mt-2 bg-red-950/60 text-red-200 border border-red-900/50 p-2.5 rounded text-[11px] leading-relaxed">
+                        {configStatus.lineSecretWarning}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="mt-2 bg-stone-950 p-3 rounded-lg overflow-x-auto border border-stone-800">
+                  <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-stone-300 max-h-60 overflow-y-auto scrollbar-thin select-text">
+                    {webhookLogs}
+                  </pre>
+                </div>
+                
+                <div className="mt-4 border-t border-stone-700/50 pt-3 text-[11px] text-stone-400 space-y-2">
+                  <p className="font-semibold text-stone-300">💡 怎麼排除「語音/訊息沒有反應」的問題？</p>
+                  <ol className="list-decimal list-inside space-y-1 text-stone-400">
+                    <li>
+                      請登入 LINE Developers Console，在 <strong className="text-stone-300 font-bold">Messaging API tab</strong> 找到 Webhook 設定。
+                    </li>
+                    <li>
+                      填入下方的 Webhook URL 網址並點擊 <strong className="text-amber-400 font-bold">Verify (驗證/測試)</strong> 按鈕：
+                      <div className="mt-1.5 flex items-center gap-1.5 bg-stone-950 px-2 py-1.5 rounded select-all font-mono text-[10px] text-emerald-400 border border-stone-850 break-all">
+                        {typeof window !== "undefined" ? window.location.origin : ""}/api/line/webhook
+                      </div>
+                    </li>
+                    <li>
+                      <strong className="text-stone-300">極重要關鍵：</strong>確保下方欄位 <strong className="text-amber-400 font-bold">Use webhook</strong> 的開關已經打開 (<strong className="text-emerald-400 font-semibold">Enabled</strong>)！預設往往是關閉。
+                    </li>
+                    <li>
+                      確認 AI Studio Settings -&gt; Secrets 設定的 <strong className="text-stone-300">LINE_CHANNEL_SECRET</strong> 是 <strong className="text-indigo-400">32 字元的 Channel Secret</strong> 密鑰（而非 Channel ID 或 Token。若簽名校驗失敗，日誌會顯示 Response status 401）。
+                    </li>
+                  </ol>
                 </div>
               </div>
             </div>
