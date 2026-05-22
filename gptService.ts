@@ -77,13 +77,23 @@ async function getCalendarEventsContext(): Promise<string> {
 
   try {
     const snapshot = await db.collection("events").get();
-    const events = snapshot.docs.map((doc: any) => ({
+    let events = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     }));
 
+    const tz = "Asia/Taipei";
+    const now = new Date();
+    const todayStr = new Date(now.toLocaleString("en-US", { timeZone: tz })).toISOString().split('T')[0];
+
+    // Filter out past events
+    events = events.filter((e: any) => {
+      const end = e.end_date || e.start_date;
+      return end >= todayStr;
+    });
+
     if (events.length === 0) {
-      return "目前行事曆上沒有任何行程。";
+      return "目前行事曆上沒有任何未來的行程。";
     }
 
     // Sort by date then time
@@ -145,6 +155,12 @@ export async function executeGptAction(actionType: "create" | "update" | "delete
     if (actionType === "update") {
       if (!data.id) return { success: false, message: "更新行程失敗：缺少行程 ID。" };
       
+      const docRef = db.collection("events").doc(data.id);
+      const doc = await docRef.get();
+      if (!doc.exists) {
+        return { success: false, message: `更新行程失敗：找不到對應的行程 (ID: ${data.id})。` };
+      }
+
       const updateData: any = {
         updatedAt: FieldValue.serverTimestamp()
       };
@@ -162,15 +178,21 @@ export async function executeGptAction(actionType: "create" | "update" | "delete
         updateData.color = MEMBER_COLORS[data.member_name] || '#4F46E5';
       }
 
-      await db.collection("events").doc(data.id).update(updateData);
-      return { success: true, message: `已成功更新行程ID「${data.id}」`, eventId: data.id };
+      await docRef.update(updateData);
+      return { success: true, message: `已成功更新行程「${updateData.title || ''}」`, eventId: data.id };
     }
 
     if (actionType === "delete") {
       const targetId = data.id || data; // accept either object with id or raw id string
       if (!targetId) return { success: false, message: "刪除行程失敗：缺少行程 ID。" };
 
-      await db.collection("events").doc(targetId).delete();
+      const docRef = db.collection("events").doc(targetId);
+      const doc = await docRef.get();
+      if (!doc.exists) {
+        return { success: false, message: `刪除行程失敗：找不到這筆行程可能已經刪除了。` };
+      }
+
+      await docRef.delete();
       return { success: true, message: `已成功刪除行程！` };
     }
 
