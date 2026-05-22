@@ -1,3 +1,13 @@
+# Environment variables
+.env
+.env.*
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
 # FamilySync Calendar Data
 events.db
 events.db-journal

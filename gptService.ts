@@ -290,26 +290,25 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
   try {
     const formData = new FormData();
-    // Wrap the buffer in a Blob/File
-    const blob = new Blob([audioBuffer], { type: 'audio/m4a' });
-    formData.append('file', Object.assign(blob, { name: 'audio.m4a' }), 'audio.m4a');
+    const file = new File([audioBuffer], 'audio.m4a', { type: 'audio/m4a' });
+    formData.append('file', file);
     formData.append('model', 'whisper-1');
     formData.append('language', 'zh');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: formData as any,
+      body: formData
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Whisper Error (${response.status}): ${errorText}`);
+        const errorText = await response.text();
+        throw new Error(`Whisper Error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as any;
     return data.text;
   } catch (error: any) {
     console.error("❌ transcribeAudio Error:", error.message);

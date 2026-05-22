@@ -177,7 +177,9 @@ async function startServer() {
         return res.json({ success: true, warning: 'no_events' });
       }
       console.log(`📦 Received ${events.length} LINE events`);
-      await Promise.all(events.map(handleLineEvent));
+      Promise.all(events.map(handleLineEvent)).catch(err => {
+        console.error("❌ Async line event error:", err);
+      });
       res.json({ success: true });
     } catch (err) {
       console.error("❌ LINE Webhook Error during processing:", err);
@@ -674,12 +676,13 @@ async function startServer() {
     if (event.type === 'message' && event.message.type === 'audio') {
       try {
         console.log(`🎤 Received audio message.`);
-        const stream = await lineClient.getMessageContent(event.message.id);
-        const chunks: any[] = [];
-        for await (const chunk of stream as any) {
-          chunks.push(chunk);
-        }
-        const buffer = Buffer.concat(chunks);
+        const stream = await lineClient.getMessageContent(event.message.id) as NodeJS.ReadableStream;
+        const buffer = await new Promise<Buffer>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          stream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+          stream.on('error', (err: Error) => reject(err));
+          stream.on('end', () => resolve(Buffer.concat(chunks)));
+        });
         
         const text = await transcribeAudio(buffer);
         console.log(`🎤 Transcribed audio text: "${text}"`);
