@@ -450,7 +450,7 @@ async function startServer() {
       const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
       const todaysEvents = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
 
-      const [weather, holiday] = await Promise.all([getTodayWeather(), getTodayHoliday(parseInt(yyyy), todayStr)]);
+      const [weather, holiday] = await Promise.all([getTodayWeather(24.1800, 120.6970, "台中市北屯區"), getTodayHoliday(parseInt(yyyy), todayStr)]);
       // if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
 
       let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
@@ -712,7 +712,7 @@ async function startServer() {
 
       // 指令 3: 天氣狀況
       if (text === '天氣' || text === '現在天氣' || text === '今日天氣') {
-        const weather = await getTodayWeather();
+        const weather = await getTodayWeather(24.1800, 120.6970, "台中市北屯區");
         const holiday = await getTodayHoliday(new Date().getFullYear(), new Date().toISOString().split('T')[0]);
         let msg = `⛅ 目前氣象狀況：\n${weather || '暫時無法取得天氣資訊'}`;
         if (holiday) msg += `\n\n🏮 今日節慶：${holiday}`;
