@@ -624,19 +624,12 @@ export default function App() {
     fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
 
-    // 2. Set up real-time listener for events in Firestore
-    const q = query(collection(db, 'events'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const dbEvents: Event[] = snapshot.docs.map(doc => ({
-        ...doc.data() as Event,
-        id: doc.id
-      }));
-
-      // Process events with importance lock handling to prevent UI "jump back"
+    // 2. Set up real-time listener for events in Firestore with API fallbacks
+    const processDatabaseEvents = (dbEvents: Event[]) => {
       const now = Date.now();
       const LOCK_TTL = 300000;
       
-      const processedEvents = dbEvents.map((event: Event) => {
+      return dbEvents.map((event: Event) => {
         let is_important = !!event.is_important;
         const idStr = String(event.id);
         const uuidStr = (event as any).uuid ? String((event as any).uuid) : '';
@@ -652,18 +645,91 @@ export default function App() {
 
         return { ...event, id: idStr, is_important };
       });
+    };
+
+    let pollInterval: NodeJS.Timeout | null = null;
+    let fallbackActive = false;
+
+    const startAPIPolling = () => {
+      if (fallbackActive) return;
+      fallbackActive = true;
+      console.log("🔄 Switching to API polling fallback...");
+      
+      const pollFromAPI = async () => {
+        try {
+          const res = await fetch('/api/events');
+          if (!res.ok) throw new Error('API server returned error');
+          const data = await res.json();
+          if (data && Array.isArray(data.events)) {
+            setEvents(processDatabaseEvents(data.events));
+            setStorageSource('api-fallback');
+            setError(null);
+          }
+        } catch (e: any) {
+          console.error("API polling fallback error:", e);
+          setEvents(prev => {
+            if (prev.length === 0) {
+              setError("資料庫連線不穩定，正在以備用通道載入中。");
+            }
+            return prev;
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      pollFromAPI();
+      pollInterval = setInterval(pollFromAPI, 10000); // Poll every 10 seconds
+    };
+
+    // Load initial events from API immediately for fast initial display
+    const loadInitialEvents = async () => {
+      try {
+        const res = await fetch('/api/events');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.events) && data.events.length > 0) {
+            setEvents(processDatabaseEvents(data.events));
+            setStorageSource('firestore (cached via API)');
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.warn("Fast-load via API failed, waiting for Firestore:", err);
+      }
+    };
+    loadInitialEvents();
+
+    const q = query(collection(db, 'events'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      fallbackActive = false;
+
+      const dbEvents: Event[] = snapshot.docs.map(doc => ({
+        ...doc.data() as Event,
+        id: doc.id
+      }));
+
+      const processedEvents = processDatabaseEvents(dbEvents);
       
       setEvents(processedEvents);
       setStorageSource('firestore');
       setLoading(false);
       setError(null);
     }, (error) => {
-        console.error("Firestore real-time error:", error);
-        setError("無法即時取得資料，請檢查網路連線或 Firebase 設定。");
-        setLoading(false);
+        console.warn("Firestore real-time subscription error:", error);
+        startAPIPolling();
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   // Use a separate effect for year-based holiday updates
@@ -676,7 +742,19 @@ export default function App() {
       // Default to Taichung Beitun District coordinates if not provided
       const lat = targetLat ?? 24.1800;
       const lon = targetLon ?? 120.6970;
-      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`);
+      
+      let response;
+      try {
+        // Try proxying through local server first (avoids CORS/sandbox block)
+        response = await fetch(`/api/weather?latitude=${lat}&longitude=${lon}`);
+        if (!response.ok) {
+          throw new Error('Local weather proxy error');
+        }
+      } catch (proxyError) {
+        console.warn("Weather proxy failed, trying direct Open-Meteo:", proxyError);
+        response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`);
+      }
+
       if (!response.ok) return;
       const text = await response.text();
       if (!text) return;

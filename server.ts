@@ -370,6 +370,20 @@ async function startServer() {
     }
   });
 
+  // API: Proxy Open-Meteo Weather to prevent client-side "Failed to fetch" due to sandboxed iframe blockers
+  app.get("/api/weather", async (req, res) => {
+    try {
+      const lat = req.query.latitude ?? 24.1800;
+      const lon = req.query.longitude ?? 120.6970;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=14`;
+      const response = await axios.get(url, { timeout: 8000 });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error("❌ GET /api/weather Proxy Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API: Get Events
   app.get("/api/events", async (req, res) => {
     try {
