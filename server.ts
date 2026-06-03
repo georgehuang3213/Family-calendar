@@ -556,8 +556,10 @@ async function startServer() {
       const reminders = events.filter((e: any) => {
         if (!e.is_important || !e.time || e.start_date !== targetDateStr) return false;
         
-        // 解析時間格式如 "14:30"
-        const [h, m] = e.time.split(':').map(Number);
+        // 解析時間格式如 "14:30"，並支援區間格式 "14:30 - 16:00"（取開始時間）
+        const startTimePart = String(e.time).split('-')[0].trim();
+        const [h, m] = startTimePart.split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) return false; // 無法解析的時間就略過，避免 NaN 比對
         const [th, tm] = targetTimeStr.split(':').map(Number);
         
         // 比對小時與分鐘 (在目標分鐘的前後 5 分鐘內)
