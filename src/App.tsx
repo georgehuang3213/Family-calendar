@@ -1,13 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Solar } from 'lunar-javascript';
 import { 
-  collection, 
-  onSnapshot, 
-  query,
-  orderBy
-} from 'firebase/firestore';                
-import { db } from './firebase';
-import { 
   format, 
   startOfMonth, 
   endOfMonth, 
@@ -83,31 +76,6 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
     window.dispatchEvent(new CustomEvent('family-auth-required'));
   }
   return res;
-}
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: any;
-}
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {},
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 function cn(...inputs: ClassValue[]) {
@@ -743,6 +711,7 @@ export default function App() {
       }
     };
 
+    reloadEventsRef.current = pollEvents; // 讓「重新整理」按鈕可直接觸發即時重抓
     pollEvents();
     const pollInterval = setInterval(pollEvents, 10000); // 每 10 秒同步一次
 
@@ -921,8 +890,12 @@ export default function App() {
 
   const importanceLocker = useRef<Map<string, { is_important: boolean, timestamp: number }>>(new Map());
 
+  // 由下方的輪詢 effect 指派 pollEvents；讓「重新整理」按鈕也能立即重新抓取行程
+  const reloadEventsRef = useRef<() => void>(() => {});
+
   const fetchEvents = async (showLoading = true) => {
-    // We now use real-time listeners for data, but keep this to check config status if needed
+    if (showLoading) setLoading(true);
+    reloadEventsRef.current();   // 立即重新從後端載入行程（不再只是刷新設定狀態）
     fetchConfigStatus();
   };
 
@@ -1879,18 +1852,14 @@ export default function App() {
             </button>
             {showDebug && configStatus && (
               <div className="ml-8 p-3 bg-white/50 dark:bg-stone-900/50 rounded-lg text-[10px] font-mono space-y-1">
-                <p>Google Sheet ID: {configStatus.hasSheetId ? '✅ 已設定' : '❌ 未設定'}</p>
-                <p>Service Account: {configStatus.serviceAccountEmail}</p>
-                <p>Private Key: {configStatus.hasPrivateKey ? '✅ 已設定' : '❌ 未設定'}</p>
-                <p>Apps Script URL: {configStatus.hasAppsScript ? '✅ 已設定' : '❌ 未設定'}</p>
-                <p>SQLite 資料庫: {configStatus.sqliteAvailable ? '✅ 可用' : '❌ 不可用 (Vercel 可能限制 native 模組)'}</p>
-                <p>環境: {configStatus.env?.VERCEL ? 'Vercel' : 'AI Studio / Local'} ({configStatus.env?.NODE_ENV})</p>
-                {configStatus.sheetInit && (
-                  <p className={cn("mt-1", configStatus.sheetInit.success ? "text-emerald-600" : "text-red-600")}>
-                    試算表初始化: {configStatus.sheetInit.success ? '✅ 成功' : `❌ 失敗 (${configStatus.sheetInit.error})`}
-                  </p>
+                <p>Firebase 資料庫: {configStatus.firebase ? `✅ 已設定 (${configStatus.firebaseKeyLength} 字元)` : '❌ 未設定'}</p>
+                <p>OpenAI 金鑰: {configStatus.openai ? `✅ 已設定 (${configStatus.openaiKeyLength} 字元)` : '❌ 未設定'}</p>
+                <p>LINE 推播: {configStatus.line ? '✅ 已設定' : '❌ 未設定'} (Token {configStatus.lineAccessToken ? '✅' : '❌'} / Secret {configStatus.lineChannelSecret ? '✅' : '❌'} / GroupID {configStatus.lineGroupId ? '✅' : '❌'})</p>
+                <p>環境: {configStatus.env?.VERCEL ? 'Vercel' : 'Local/Dev'} ({configStatus.env?.NODE_ENV})</p>
+                {configStatus.lineSecretWarning && (
+                  <p className="mt-1 text-amber-600">{configStatus.lineSecretWarning}</p>
                 )}
-                <p className="mt-2 text-stone-400 dark:text-stone-500">提示：請在 Vercel 專案設定中新增這些環境變數。</p>
+                <p className="mt-2 text-stone-400 dark:text-stone-500">提示：請在 Vercel 專案設定 → Environment Variables 中設定這些變數。</p>
               </div>
             )}
           </div>
