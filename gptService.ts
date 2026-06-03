@@ -120,6 +120,18 @@ async function getCalendarEventsContext(): Promise<string> {
   }
 }
 
+/** 事件版本號 +1（與 server.ts 的 bumpEventsRev 一致），讓前端用低成本輪詢偵測行程變更 */
+async function bumpEventsRev(db: any) {
+  try {
+    await db.collection("system_config").doc("events_meta").set(
+      { rev: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("bumpEventsRev (gptService) failed:", e);
+  }
+}
+
 /**
  * Executes database actions parsed from ChatGPT's response
  */
@@ -149,6 +161,7 @@ export async function executeGptAction(actionType: "create" | "update" | "delete
       };
 
       await db.collection("events").doc(id).set(newEvent);
+      await bumpEventsRev(db);
       return { success: true, message: `已成功新增行程「${newEvent.title}」(${newEvent.start_date} - ${newEvent.member_name})`, eventId: id };
     } 
     
@@ -179,6 +192,7 @@ export async function executeGptAction(actionType: "create" | "update" | "delete
       }
 
       await docRef.update(updateData);
+      await bumpEventsRev(db);
       return { success: true, message: `已成功更新行程「${updateData.title || ''}」`, eventId: data.id };
     }
 
@@ -193,6 +207,7 @@ export async function executeGptAction(actionType: "create" | "update" | "delete
       }
 
       await docRef.delete();
+      await bumpEventsRev(db);
       return { success: true, message: `已成功刪除行程！` };
     }
 

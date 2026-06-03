@@ -153,6 +153,18 @@ async function getTodayHoliday(year: number, dateStrYYYYMMDD: string) {
   }
 }
 
+// 事件「版本號」：每次行程異動就 +1。前端用它做極低成本的變更偵測（只讀這一份小文件，而非整個 events 集合）。
+async function bumpEventsRev(database: any) {
+  try {
+    await database.collection('system_config').doc('events_meta').set(
+      { rev: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error('bumpEventsRev failed:', e);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -427,13 +439,33 @@ async function startServer() {
   });
 
   // API: Get Events
+  // 透過 system_config/events_meta 的 rev 版本號做「變更偵測」：
+  // 前端帶上自己已知的 rev，若與伺服器相同就只回 { changed:false }（僅讀 1 份小文件），
+  // 不再每次都把整個 events 集合讀出來，大幅降低 Firestore 讀取量與成本。
   app.get("/api/events", async (req, res) => {
     try {
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
+
+      let rev = 0;
+      try {
+        const metaSnap = await database.collection('system_config').doc('events_meta').get();
+        if (metaSnap.exists && typeof metaSnap.data().rev === 'number') {
+          rev = metaSnap.data().rev;
+        }
+      } catch (e) {
+        console.warn('讀取 events_meta 失敗，改為回傳完整清單。', e);
+      }
+
+      const clientRev = req.query.rev !== undefined ? Number(req.query.rev) : null;
+      if (clientRev !== null && !Number.isNaN(clientRev) && clientRev === rev) {
+        // 沒有變化：整個請求只花了 1 次 Firestore 讀取
+        return res.json({ changed: false, rev, source: 'firestore' });
+      }
+
       const snapshot = await database.collection('events').get();
       const events = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-      res.json({ events, source: 'firestore' });
+      res.json({ changed: true, rev, events, source: 'firestore' });
     } catch (error: any) {
       console.error("❌ GET /api/events Error:", error);
       res.status(500).json({ error: error.message });
@@ -448,7 +480,8 @@ async function startServer() {
       const id = uuidv4();
       const eventData = { ...req.body, id, createdAt: FieldValue.serverTimestamp() };
       await database.collection('events').doc(id).set(eventData);
-      
+      await bumpEventsRev(database);
+
       // 為了節省 LINE 的免費 Push 額度，我們取消「新增今日行程就推播」的功能
       // 只保留每日早上的總結推播，以及 1 小時前的重要提醒
       res.json({ success: true, id, event: eventData });
@@ -465,6 +498,7 @@ async function startServer() {
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
       await database.collection('events').doc(id).update({ ...req.body, updatedAt: FieldValue.serverTimestamp() });
+      await bumpEventsRev(database);
       res.json({ success: true });
     } catch (error: any) {
       console.error(`❌ PUT /api/events/${req.params.id} Error:`, error);
@@ -479,6 +513,7 @@ async function startServer() {
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
       await database.collection('events').doc(id).delete();
+      await bumpEventsRev(database);
       res.json({ success: true });
     } catch (error: any) {
       console.error(`❌ DELETE /api/events/${req.params.id} Error:`, error);

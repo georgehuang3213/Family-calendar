@@ -688,11 +688,22 @@ export default function App() {
     };
 
     // 改走後端 API 輪詢 (Firestore 安全規則已鎖死，前端不再直接連線資料庫)
-    const pollEvents = async () => {
+    // 帶上已知的 rev 版本號做變更偵測：沒變動時後端只回 { changed:false }（僅 1 次讀取），
+    // 大幅降低 Firestore 讀取量。每隔約 10 分鐘（forceFull）做一次完整重抓以自我修復。
+    const pollEvents = async (force = false) => {
       try {
-        const res = await apiFetch('/api/events');
+        pollCountRef.current += 1;
+        const forceFull = force || eventsRevRef.current === null || (pollCountRef.current % 30 === 0);
+        const url = forceFull ? '/api/events' : `/api/events?rev=${eventsRevRef.current}`;
+        const res = await apiFetch(url);
         if (!res.ok) throw new Error(`API 回應錯誤 (${res.status})`);
         const data = await res.json();
+        if (typeof data.rev === 'number') eventsRevRef.current = data.rev;
+        if (data.changed === false) {
+          // 沒有變化：沿用目前資料，不重新渲染
+          setError(null);
+          return;
+        }
         if (data && Array.isArray(data.events)) {
           setEvents(processDatabaseEvents(data.events));
           setStorageSource('firestore');
@@ -711,9 +722,9 @@ export default function App() {
       }
     };
 
-    reloadEventsRef.current = pollEvents; // 讓「重新整理」按鈕可直接觸發即時重抓
-    pollEvents();
-    const pollInterval = setInterval(pollEvents, 10000); // 每 10 秒同步一次
+    reloadEventsRef.current = () => pollEvents(true); // 「重新整理」按鈕：強制完整重抓
+    pollEvents(true);
+    const pollInterval = setInterval(() => pollEvents(), 20000); // 每 20 秒同步一次（搭配 rev 變更偵測，成本極低）
 
     return () => {
       clearInterval(pollInterval);
@@ -892,6 +903,8 @@ export default function App() {
 
   // 由下方的輪詢 effect 指派 pollEvents；讓「重新整理」按鈕也能立即重新抓取行程
   const reloadEventsRef = useRef<() => void>(() => {});
+  const eventsRevRef = useRef<number | null>(null); // 後端事件版本號，用來做低成本變更偵測
+  const pollCountRef = useRef(0);                    // 輪詢次數，用來決定何時做一次完整重抓（自我修復）
 
   const fetchEvents = async (showLoading = true) => {
     if (showLoading) setLoading(true);
