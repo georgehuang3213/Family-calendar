@@ -1,10 +1,17 @@
+rules_version = '2';
+
+// 安全策略:所有讀寫一律透過後端 (firebase-admin) 進行。
+// firebase-admin 使用服務帳戶,會「繞過」這些規則,因此後端 API 不受影響。
+// 前端不再直接連線 Firestore(改走帶有家庭通行碼的 /api/* 後端 API),
+// 所以這裡將所有用戶端 (client SDK) 的直接存取一律拒絕。
+//
+// ⚠️ 重要:修改這個檔案後必須「部署」才會生效:
+//    firebase deploy --only firestore:rules
+//    (或在 Firebase 主控台 → Firestore → 規則 貼上後發布)
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /events/{eventId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

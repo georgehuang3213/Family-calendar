@@ -66,6 +66,25 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+// --- 家庭通行碼 (Shared Family Access Key) ---
+const FAMILY_KEY_STORAGE = 'familyAccessKey';
+function getFamilyKey(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(FAMILY_KEY_STORAGE) || '';
+}
+// 所有 /api 請求都透過這個包裝送出，自動帶上通行碼標頭；
+// 若收到 401（密碼錯誤或失效）就清掉本機密碼並通知 App 重新顯示登入畫面。
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers || {});
+  headers.set('x-family-key', getFamilyKey());
+  const res = await fetch(input, { ...init, headers });
+  if (res.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem(FAMILY_KEY_STORAGE);
+    window.dispatchEvent(new CustomEvent('family-auth-required'));
+  }
+  return res;
+}
+
 enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -259,6 +278,58 @@ export default function App() {
   const [dynamicHolidays, setDynamicHolidays] = useState<Record<string, string>>({});
   const [makeupWorkdays, setMakeupWorkdays] = useState<Record<string, string>>({});
 
+  // --- 登入閘門 (家庭通行碼) ---
+  const [authed, setAuthed] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [keyInput, setKeyInput] = useState('');
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const verifySavedKey = async () => {
+      if (!getFamilyKey()) {
+        if (!cancelled) { setAuthed(false); setAuthChecking(false); }
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/auth/verify');
+        if (!cancelled) { setAuthed(res.ok); setAuthChecking(false); }
+      } catch {
+        if (!cancelled) { setAuthed(false); setAuthChecking(false); }
+      }
+    };
+    verifySavedKey();
+    const onAuthRequired = () => setAuthed(false);
+    window.addEventListener('family-auth-required', onAuthRequired);
+    return () => { cancelled = true; window.removeEventListener('family-auth-required', onAuthRequired); };
+  }, []);
+
+  const handleSubmitKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const k = keyInput.trim();
+    if (!k) return;
+    setKeyError(null);
+    setAuthSubmitting(true);
+    try {
+      // 先暫存，讓後續 apiFetch 帶上這把 key；此處驗證用明確標頭，避免 apiFetch 的 401 副作用
+      localStorage.setItem(FAMILY_KEY_STORAGE, k);
+      const res = await fetch('/api/auth/verify', { headers: { 'x-family-key': k } });
+      if (res.ok) {
+        setAuthed(true);
+        setKeyInput('');
+      } else {
+        localStorage.removeItem(FAMILY_KEY_STORAGE);
+        setKeyError('通行碼錯誤，請再試一次。');
+      }
+    } catch {
+      localStorage.removeItem(FAMILY_KEY_STORAGE);
+      setKeyError('連線失敗，請稍後再試。');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
   // ChatGPT AI Assistant States
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant' | 'system', content: string }[]>([
@@ -292,7 +363,7 @@ export default function App() {
         .slice(-6) // Limit chat context to keep responses fast and robust
         .map(m => ({ role: m.role, content: m.content }));
 
-      const res = await fetch('/api/ai/chat', {
+      const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -385,7 +456,7 @@ export default function App() {
     showToast('行程已移動');
 
     try {
-      const res = await fetch(`/api/events/${eventId}`, {
+      const res = await apiFetch(`/api/events/${eventId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedEvent)
@@ -453,7 +524,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/events', {
+      const res = await apiFetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leaveEvent)
@@ -530,7 +601,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/events', {
+      const res = await apiFetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(workEvent)
@@ -582,6 +653,7 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (!authed) return;
     // 1. Fetch static resources (Weather, Holidays)
     const initLocationAndWeather = () => {
       if (navigator.geolocation) {
@@ -598,7 +670,7 @@ export default function App() {
                 setLocationName(locName);
                 
                 // Save it back to server so the LINE morning pushing uses it
-                fetch('/api/config/weather', {
+                apiFetch('/api/config/weather', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ lat: latitude, lon: longitude, locationName: locName })
@@ -624,7 +696,7 @@ export default function App() {
     fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
 
-    // 2. Set up real-time listener for events in Firestore with API fallbacks
+    // 2. 透過後端 API 載入行程並套用「重要」樂觀鎖
     const processDatabaseEvents = (dbEvents: Event[]) => {
       const now = Date.now();
       const LOCK_TTL = 300000;
@@ -647,95 +719,43 @@ export default function App() {
       });
     };
 
-    let pollInterval: NodeJS.Timeout | null = null;
-    let fallbackActive = false;
-
-    const startAPIPolling = () => {
-      if (fallbackActive) return;
-      fallbackActive = true;
-      console.log("🔄 Switching to API polling fallback...");
-      
-      const pollFromAPI = async () => {
-        try {
-          const res = await fetch('/api/events');
-          if (!res.ok) throw new Error('API server returned error');
-          const data = await res.json();
-          if (data && Array.isArray(data.events)) {
-            setEvents(processDatabaseEvents(data.events));
-            setStorageSource('api-fallback');
-            setError(null);
-          }
-        } catch (e: any) {
-          console.error("API polling fallback error:", e);
-          setEvents(prev => {
-            if (prev.length === 0) {
-              setError("資料庫連線不穩定，正在以備用通道載入中。");
-            }
-            return prev;
-          });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      pollFromAPI();
-      pollInterval = setInterval(pollFromAPI, 10000); // Poll every 10 seconds
-    };
-
-    // Load initial events from API immediately for fast initial display
-    const loadInitialEvents = async () => {
+    // 改走後端 API 輪詢 (Firestore 安全規則已鎖死，前端不再直接連線資料庫)
+    const pollEvents = async () => {
       try {
-        const res = await fetch('/api/events');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.events) && data.events.length > 0) {
-            setEvents(processDatabaseEvents(data.events));
-            setStorageSource('firestore (cached via API)');
-            setLoading(false);
-          }
+        const res = await apiFetch('/api/events');
+        if (!res.ok) throw new Error(`API 回應錯誤 (${res.status})`);
+        const data = await res.json();
+        if (data && Array.isArray(data.events)) {
+          setEvents(processDatabaseEvents(data.events));
+          setStorageSource('firestore');
+          setError(null);
         }
-      } catch (err) {
-        console.warn("Fast-load via API failed, waiting for Firestore:", err);
+      } catch (e: any) {
+        console.error("載入行程失敗:", e);
+        setEvents(prev => {
+          if (prev.length === 0) {
+            setError("資料載入失敗，將自動重試。");
+          }
+          return prev;
+        });
+      } finally {
+        setLoading(false);
       }
     };
-    loadInitialEvents();
 
-    const q = query(collection(db, 'events'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
-      fallbackActive = false;
-
-      const dbEvents: Event[] = snapshot.docs.map(doc => ({
-        ...doc.data() as Event,
-        id: doc.id
-      }));
-
-      const processedEvents = processDatabaseEvents(dbEvents);
-      
-      setEvents(processedEvents);
-      setStorageSource('firestore');
-      setLoading(false);
-      setError(null);
-    }, (error) => {
-        console.warn("Firestore real-time subscription error:", error);
-        startAPIPolling();
-    });
+    pollEvents();
+    const pollInterval = setInterval(pollEvents, 10000); // 每 10 秒同步一次
 
     return () => {
-      unsubscribe();
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
+      clearInterval(pollInterval);
     };
-  }, []);
+  }, [authed]);
 
   // Use a separate effect for year-based holiday updates
   useEffect(() => {
+    if (!authed) return;
     fetchHolidays(currentDate.getFullYear());
-  }, [currentDate.getFullYear()]);
+  }, [authed, currentDate.getFullYear()]);
 
   const fetchWeather = async (targetLat?: number, targetLon?: number) => {
     try {
@@ -746,7 +766,7 @@ export default function App() {
       let response;
       try {
         // Try proxying through local server first (avoids CORS/sandbox block)
-        response = await fetch(`/api/weather?latitude=${lat}&longitude=${lon}`);
+        response = await apiFetch(`/api/weather?latitude=${lat}&longitude=${lon}`);
         if (!response.ok) {
           throw new Error('Local weather proxy error');
         }
@@ -789,7 +809,7 @@ export default function App() {
   const fetchHolidays = async (year: number) => {
     try {
       // Fetch from our local API which proxies the Taiwan Government Open Data
-      const response = await fetch(`/api/taiwan-calendar?year=${year}`);
+      const response = await apiFetch(`/api/taiwan-calendar?year=${year}`);
       if (!response.ok) {
         // Fallback to Nager.Date if our local API fails
         const fallbackResponse = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/TW`);
@@ -835,7 +855,7 @@ export default function App() {
 
   const fetchConfigStatus = async () => {
     try {
-      const res = await fetch('/api/config-status');
+      const res = await apiFetch('/api/config-status');
       if (res.ok) {
         const data = await res.json();
         setConfigStatus(data);
@@ -848,7 +868,7 @@ export default function App() {
   const fetchWebhookLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const res = await fetch('/api/webhook-logs');
+      const res = await apiFetch('/api/webhook-logs');
       if (res.ok) {
         const data = await res.json();
         setWebhookLogs(data.logs);
@@ -865,7 +885,7 @@ export default function App() {
   const clearWebhookLogs = async () => {
     if (!window.confirm('確定要清空 Webhook 日誌嗎？')) return;
     try {
-      const res = await fetch('/api/webhook-logs/clear', { method: 'POST' });
+      const res = await apiFetch('/api/webhook-logs/clear', { method: 'POST' });
       if (res.ok) {
         setWebhookLogs('日誌已清空。');
       }
@@ -1017,7 +1037,7 @@ export default function App() {
     
     try {
       // 使用 DELETE 方法並將 title 放入 query string
-      const res = await fetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(eventToDeleteObj.title)}`, {
+      const res = await apiFetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(eventToDeleteObj.title)}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventToDeleteObj)
@@ -1066,8 +1086,8 @@ export default function App() {
     try {
       const url = isEditing ? `/api/events/${editingEventId}` : '/api/events';
       const method = isEditing ? 'PUT' : 'POST';
-      
-      const res = await fetch(url, {
+
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1314,6 +1334,52 @@ export default function App() {
     console.log("DEBUG: Important events calculated:", filtered.length, filtered);
     return filtered;
   }, [events]);
+
+  // 登入閘門:通過家庭通行碼前，只顯示載入或登入畫面
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
+        <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+          <Clock size={20} className="animate-spin text-indigo-600" />
+          <span className="text-sm font-bold">載入中…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950 p-4">
+        <div className="w-full max-w-sm bg-white dark:bg-stone-900 rounded-2xl shadow-xl border border-stone-200 dark:border-stone-800 p-8">
+          <div className="flex flex-col items-center text-center mb-6">
+            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-3">
+              <CalendarIcon size={28} />
+            </div>
+            <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">家庭行事曆</h1>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-medium">請輸入家庭通行碼以繼續</p>
+          </div>
+          <form onSubmit={handleSubmitKey} className="space-y-3">
+            <input
+              type="password"
+              value={keyInput}
+              onChange={e => setKeyInput(e.target.value)}
+              autoFocus
+              placeholder="家庭通行碼"
+              className="w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3 text-sm font-medium text-stone-900 dark:text-stone-100 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            {keyError && <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{keyError}</p>}
+            <button
+              type="submit"
+              disabled={!keyInput.trim() || authSubmitting}
+              className="w-full bg-indigo-600 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 hover:bg-indigo-700 transition-colors"
+            >
+              {authSubmitting ? '驗證中…' : '進入'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn(

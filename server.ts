@@ -240,6 +240,48 @@ async function startServer() {
     next();
   });
 
+  // --- 家庭通行碼驗證 (Shared Family Access Key) ---
+  // 密碼只存在後端環境變數,不會進到前端 bundle。
+  // 前端每個 /api 請求都需帶 x-family-key 標頭,由下方閘門統一驗證。
+  const FAMILY_ACCESS_KEY = process.env.FAMILY_ACCESS_KEY || "";
+  function requireFamilyKey(req: any, res: any, next: any) {
+    if (!FAMILY_ACCESS_KEY) {
+      // 沒設密碼時「故障即關閉」(fail closed),避免不小心又變回全開放。
+      return res.status(503).json({ error: "伺服器尚未設定 FAMILY_ACCESS_KEY 環境變數,API 已封鎖以保護資料。" });
+    }
+    const provided = req.headers["x-family-key"] || "";
+    if (provided !== FAMILY_ACCESS_KEY) {
+      return res.status(401).json({ error: "未授權:請輸入正確的家庭通行碼。" });
+    }
+    next();
+  }
+
+  // --- Cron 端點驗證 (Vercel Cron 會自動帶 Authorization: Bearer <CRON_SECRET>) ---
+  function requireCronSecret(req: any, res: any, next: any) {
+    const secret = process.env.CRON_SECRET || "";
+    if (!secret) {
+      return res.status(503).json({ error: "伺服器尚未設定 CRON_SECRET 環境變數。" });
+    }
+    if (req.headers["authorization"] !== `Bearer ${secret}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    next();
+  }
+
+  // 統一閘門:保護所有 /api/*,但放行 LINE webhook(簽章驗證)與 cron(CRON_SECRET 驗證)。
+  app.use("/api", (req, res, next) => {
+    const urlPath = (req.originalUrl || req.url).split("?")[0];
+    if (urlPath === "/api/line/webhook" || urlPath.startsWith("/api/cron/")) {
+      return next();
+    }
+    return requireFamilyKey(req, res, next);
+  });
+
+  // API: 驗證家庭通行碼 (前端登入閘門使用;能走到這裡代表上面的閘門已驗證通過)
+  app.get("/api/auth/verify", (req, res) => {
+    res.json({ success: true });
+  });
+
   // API: Taiwan Calendar Proxy
   app.get("/api/taiwan-calendar", async (req, res) => {
     const year = req.query.year || new Date().getFullYear();
@@ -445,7 +487,7 @@ async function startServer() {
   });
 
   // API: Daily Push (Cron)
-  app.get("/api/cron/daily-push", async (req, res) => {
+  app.get("/api/cron/daily-push", requireCronSecret, async (req, res) => {
     try {
       const groupId = process.env.LINE_GROUP_ID;
       if (!groupId) {
@@ -493,7 +535,7 @@ async function startServer() {
   });
 
   // API: Hourly Important Reminder (Cron)
-  app.get("/api/cron/hourly-reminder", async (req, res) => {
+  app.get("/api/cron/hourly-reminder", requireCronSecret, async (req, res) => {
     try {
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
@@ -852,14 +894,18 @@ async function startServer() {
   cron.schedule('0 7 * * *', async () => {
     console.log("⏰ Running internal daily push cron...");
     try {
-      await axios.get(`http://localhost:${PORT}/api/cron/daily-push`);
+      await axios.get(`http://localhost:${PORT}/api/cron/daily-push`, {
+        headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
+      });
     } catch(e: any) { console.error("Cron daily push failed:", e.message); }
   }, { timezone: 'Asia/Taipei' });
 
   cron.schedule('*/5 * * * *', async () => {
     console.log("⏰ Running internal hourly reminder cron...");
     try {
-      await axios.get(`http://localhost:${PORT}/api/cron/hourly-reminder`);
+      await axios.get(`http://localhost:${PORT}/api/cron/hourly-reminder`, {
+        headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
+      });
     } catch(e: any) { console.error("Cron hourly reminder failed:", e.message); }
   });
 
