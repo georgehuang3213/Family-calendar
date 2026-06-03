@@ -222,7 +222,7 @@ export default function App() {
   const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
   const [eventToDelete, setEventToDelete] = useState<string | number | null>(null);
   const [eventToDeleteObj, setEventToDeleteObj] = useState<Event | null>(null);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error', action?: { label: string, onClick: () => void }, duration?: number } | null>(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
   const [quickSelectType, setQuickSelectType] = useState<'leave' | 'work'>('leave');
@@ -438,13 +438,13 @@ export default function App() {
 
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
+      const timer = setTimeout(() => setToast(null), toast.duration ?? 3000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
+  const showToast = (message: string, type: 'success' | 'error' = 'success', action?: { label: string, onClick: () => void }, duration?: number) => {
+    setToast({ message, type, action, duration });
   };
 
   const handleQuickLeave = async (member: string) => {
@@ -1011,28 +1011,54 @@ export default function App() {
     setIsDeleteModalOpen(true);
   };
 
+  // #7 「復原」：重新建立被刪除的行程（內容相同，會取得新的內部 ID）
+  const undoDelete = async (ev: Event) => {
+    const { id, ...rest } = ev as any;
+    const tempId = `temp-undo-${Date.now()}`;
+    setEvents(prev => [...prev, { ...ev, id: tempId }]);
+    showToast('正在復原…');
+    try {
+      const res = await apiFetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...rest, action: 'create' })
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || '復原失敗');
+      if (result.id) {
+        setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id } : e));
+      }
+      showToast('已復原行程');
+    } catch (err: any) {
+      setEvents(prev => prev.filter(e => String(e.id) !== tempId));
+      showToast(`復原失敗: ${err.message}`, 'error');
+    }
+  };
+
   const executeDelete = async () => {
     if (!eventToDelete || !eventToDeleteObj) return;
-    
+
+    const deletedEvent = eventToDeleteObj; // 保留供「復原」使用
     const previousEvents = [...events];
     setIsDeleteModalOpen(false);
-    
+
     // Optimistic update
     setEvents(events.filter(e => e.id !== eventToDelete));
-    showToast('活動已刪除');
-    
+
     try {
       // 使用 DELETE 方法並將 title 放入 query string
-      const res = await apiFetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(eventToDeleteObj.title)}`, {
+      const res = await apiFetch(`/api/events/${eventToDelete}?title=${encodeURIComponent(deletedEvent.title)}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventToDeleteObj)
+        body: JSON.stringify(deletedEvent)
       });
-      
+
       const result = await res.json();
       if (!res.ok || !result.success) {
         throw new Error(result.error || '刪除請求失敗');
       }
+      // 刪除成功 → 顯示 6 秒的「復原」選項
+      showToast(`已刪除「${deletedEvent.title}」`, 'success', { label: '復原', onClick: () => undoDelete(deletedEvent) }, 6000);
     } catch (err: any) {
       setEvents(previousEvents);
       showToast(`刪除失敗: ${err.message}`, 'error');
@@ -1040,6 +1066,11 @@ export default function App() {
   };
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    // #6 多日行程：結束日期不可早於開始日期
+    if (newEvent.end_date && newEvent.start_date && newEvent.end_date < newEvent.start_date) {
+      showToast('結束日期不能早於開始日期', 'error');
+      return;
+    }
     const eventColor = MEMBER_COLORS[newEvent.member_name] || '#4F46E5';
     const isEditing = !!editingEventId;
     
@@ -2671,6 +2702,14 @@ export default function App() {
         )}>
           {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
           <span className="text-sm font-black tracking-tight">{toast.message}</span>
+          {toast.action && (
+            <button
+              onClick={() => { const a = toast.action!; setToast(null); a.onClick(); }}
+              className="ml-2 px-2.5 py-1 rounded-lg bg-white/25 hover:bg-white/40 text-xs font-black tracking-tight transition-colors"
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
 
@@ -2753,7 +2792,15 @@ export default function App() {
                       required
                       type="date" 
                       value={newEvent.start_date || ''}
-                      onChange={e => setNewEvent({...newEvent, start_date: e.target.value, end_date: e.target.value})}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setNewEvent(prev => ({
+                          ...prev,
+                          start_date: v,
+                          // #6 保留刻意設定的較晚結束日；只在原本是單日、或結束日早於新開始日時才跟著移動
+                          end_date: (prev.end_date === prev.start_date || prev.end_date < v) ? v : prev.end_date,
+                        }));
+                      }}
                       className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                     />
                   </div>
@@ -2770,6 +2817,12 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {newEvent.start_date && newEvent.end_date && newEvent.end_date > newEvent.start_date && (
+                  <p className={cn("font-bold text-indigo-600 dark:text-indigo-400", isElderlyMode ? "text-lg" : "text-xs")}>
+                    📅 跨 {Math.round((new Date(newEvent.end_date).getTime() - new Date(newEvent.start_date).getTime()) / 86400000) + 1} 天
+                  </p>
+                )}
 
                 <div className="flex items-center space-x-2 pt-1 pb-1">
                   <input
