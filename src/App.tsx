@@ -477,6 +477,7 @@ export default function App() {
       time: '',
       member_name: member,
       color: eventColor,
+      is_important: false,
       action: 'create',
     };
 
@@ -554,6 +555,7 @@ export default function App() {
       time: '',
       member_name: member,
       color: eventColor,
+      is_important: false,
       action: 'create',
     };
 
@@ -2696,6 +2698,7 @@ export default function App() {
               time: '',
               member_name: FAMILY_MEMBERS[0],
               color: MEMBER_COLORS[FAMILY_MEMBERS[0]],
+              is_important: false,
             });
             setIsModalOpen(true);
           }}
