@@ -724,10 +724,33 @@ export default function App() {
 
     reloadEventsRef.current = () => pollEvents(true); // 「重新整理」按鈕：強制完整重抓
     pollEvents(true);
-    const pollInterval = setInterval(() => pollEvents(), 20000); // 每 20 秒同步一次（搭配 rev 變更偵測，成本極低）
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      if (pollInterval) return;
+      pollInterval = setInterval(() => pollEvents(), 45000); // 每 45 秒同步一次（搭配 rev 變更偵測，成本極低）
+    };
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling(); // 分頁切到背景時暫停輪詢，節省 Firestore 讀取與流量
+      } else {
+        pollEvents(); // 回到前景立即同步一次（帶 rev，成本極低）
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(pollInterval);
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [authed]);
 

@@ -162,7 +162,30 @@ async function bumpEventsRev(database: any) {
     );
   } catch (e) {
     console.error('bumpEventsRev failed:', e);
+  } finally {
+    revCache = null; // 版本已變動，清掉快取讓下一次 GET 讀到最新值
   }
+}
+
+// 短時間內快取 rev 值：多個家庭成員同時輪詢時，同一 TTL 窗口內只讀一次 Firestore。
+let revCache: { rev: number; ts: number } | null = null;
+const REV_CACHE_TTL = 5000; // 5 秒
+async function getEventsRev(database: any): Promise<number> {
+  const now = Date.now();
+  if (revCache && (now - revCache.ts) < REV_CACHE_TTL) {
+    return revCache.rev;
+  }
+  let rev = 0;
+  try {
+    const metaSnap = await database.collection('system_config').doc('events_meta').get();
+    if (metaSnap.exists && typeof metaSnap.data().rev === 'number') {
+      rev = metaSnap.data().rev;
+    }
+  } catch (e) {
+    console.warn('讀取 events_meta 失敗，改為回傳完整清單。', e);
+  }
+  revCache = { rev, ts: now };
+  return rev;
 }
 
 async function startServer() {
@@ -447,15 +470,7 @@ async function startServer() {
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
 
-      let rev = 0;
-      try {
-        const metaSnap = await database.collection('system_config').doc('events_meta').get();
-        if (metaSnap.exists && typeof metaSnap.data().rev === 'number') {
-          rev = metaSnap.data().rev;
-        }
-      } catch (e) {
-        console.warn('讀取 events_meta 失敗，改為回傳完整清單。', e);
-      }
+      const rev = await getEventsRev(database);
 
       const clientRev = req.query.rev !== undefined ? Number(req.query.rev) : null;
       if (clientRev !== null && !Number.isNaN(clientRev) && clientRev === rev) {
