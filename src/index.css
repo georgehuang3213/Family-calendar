@@ -2,6 +2,12 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* 全站放大字體：Tailwind 的字級與間距預設都是 rem，調整根字級可等比放大全部文字，
+   連同 padding/gap 一起放大，維持排版比例（而不是文字變大但容器不變造成擠壓）。*/
+html {
+  font-size: 18px;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }

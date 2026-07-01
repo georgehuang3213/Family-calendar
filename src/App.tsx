@@ -1442,7 +1442,7 @@ export default function App() {
                 "w-1 h-1 rounded-full",
                 storageSource === 'local' ? "bg-amber-500" : "bg-emerald-500"
               )} />
-              <span className="text-[8px] font-bold text-stone-400 uppercase tracking-tighter">
+              <span className="text-[9px] font-bold text-stone-400 uppercase tracking-tighter">
                 {storageSource === 'local' ? '本地' : '雲端'}
               </span>
             </div>
@@ -1483,7 +1483,7 @@ export default function App() {
               setCurrentDate(new Date());
               setSelectedDay(new Date());
             }}
-            className="flex items-center justify-center bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
+            className="flex items-center justify-center bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
           >
             今天
           </button>
@@ -1491,7 +1491,7 @@ export default function App() {
           <button 
             onClick={() => setIsElderlyMode(!isElderlyMode)}
             className={cn(
-              "flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm border",
+              "flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-bold transition-colors shadow-sm border",
               isElderlyMode 
                 ? "bg-amber-500 text-white border-amber-600" 
                 : "bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
@@ -1535,14 +1535,14 @@ export default function App() {
               <div className="flex items-center justify-between mb-3 md:mb-4">
                 <div className={cn(
                   "flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-[0.2em] uppercase",
-                  isElderlyMode ? "text-xl" : "text-[10px] md:text-xs"
+                  isElderlyMode ? "text-xl" : "text-[11px] md:text-xs"
                 )}>
                   <Megaphone size={isElderlyMode ? 28 : 14} />
                   <span>置頂重要公告</span>
                 </div>
                 <span className={cn(
                   "font-bold text-amber-600/60 dark:text-amber-500/40 bg-amber-100/50 dark:bg-amber-900/40 rounded-full",
-                  isElderlyMode ? "px-4 py-1 text-lg" : "px-2 py-0.5 text-[10px]"
+                  isElderlyMode ? "px-4 py-1 text-lg" : "px-2 py-0.5 text-[11px]"
                 )}>
                   {upcomingImportantEvents.length} 則
                 </span>
@@ -1560,14 +1560,14 @@ export default function App() {
                     <div className="flex items-center justify-between mb-2">
                       <span className={cn(
                         "text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1.5",
-                        isElderlyMode ? "text-xl" : "text-[10px]"
+                        isElderlyMode ? "text-xl" : "text-[11px]"
                       )}>
                         <Star size={isElderlyMode ? 22 : 12} className="fill-amber-500" />
                         {format(safeParseISO(evt.start_date), 'MM/dd')} 
                       </span>
                       <span className={cn(
                         "font-bold text-stone-400 dark:text-stone-500 group-hover:text-amber-600 transition-colors bg-stone-100 dark:bg-stone-900/50 px-2 py-0.5 rounded-lg",
-                        isElderlyMode ? "text-xl" : "text-[10px]"
+                        isElderlyMode ? "text-xl" : "text-[11px]"
                       )}>
                         {evt.member_name}
                       </span>
@@ -1581,7 +1581,7 @@ export default function App() {
                         <Clock size={isElderlyMode ? 20 : 12} className="text-stone-400" />
                         <span className={cn(
                           "font-bold text-stone-500 dark:text-stone-400",
-                          isElderlyMode ? "text-xl" : "text-[10px]"
+                          isElderlyMode ? "text-xl" : "text-[11px]"
                         )}>{formatTimeDisplay(evt.time)}</span>
                       </div>
                     )}
@@ -1718,7 +1718,7 @@ export default function App() {
                   </div>
                   <span className="text-sm font-bold tracking-wide">{locationName}</span>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
+                <span className="text-[11px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
                   即時天氣
                 </span>
               </div>
@@ -1741,7 +1741,7 @@ export default function App() {
                 
                 {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
                   <div className="text-right">
-                    <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">今日預估</div>
+                    <div className="text-[11px] font-black uppercase tracking-widest opacity-60 mb-1">今日預估</div>
                     <div className="text-sm font-bold">
                       {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}° ~ {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
                     </div>
@@ -1779,7 +1779,7 @@ export default function App() {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-stone-500">
               <Filter size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">篩選成員</span>
+              <span className="text-[11px] font-black uppercase tracking-widest">篩選成員</span>
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
@@ -1790,7 +1790,7 @@ export default function App() {
                   if (!isQuickLeaveEnabled) setIsQuickWorkEnabled(false);
                 }}
                 className={cn(
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
+                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
                   isQuickLeaveEnabled 
                     ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
                     : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
@@ -1807,7 +1807,7 @@ export default function App() {
                   if (!isQuickWorkEnabled) setIsQuickLeaveEnabled(false);
                 }}
                 className={cn(
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
+                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
                   isQuickWorkEnabled 
                     ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 shadow-sm"
                     : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
@@ -1878,7 +1878,7 @@ export default function App() {
                 <button 
                   onClick={() => setViewMode('calendar')}
                   className={cn(
-                    "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
+                    "px-3 py-1 rounded-md text-[11px] font-bold transition-all",
                     viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
@@ -1887,7 +1887,7 @@ export default function App() {
                 <button 
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
+                    "px-3 py-1 rounded-md text-[11px] font-bold transition-all",
                     viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
@@ -1920,7 +1920,7 @@ export default function App() {
               {showDebug ? '隱藏除錯資訊' : '顯示除錯資訊'}
             </button>
             {showDebug && configStatus && (
-              <div className="ml-8 p-3 bg-white/50 dark:bg-stone-900/50 rounded-lg text-[10px] font-mono space-y-1">
+              <div className="ml-8 p-3 bg-white/50 dark:bg-stone-900/50 rounded-lg text-[11px] font-mono space-y-1">
                 <p>Firebase 資料庫: {configStatus.firebase ? `✅ 已設定 (${configStatus.firebaseKeyLength} 字元)` : '❌ 未設定'}</p>
                 <p>OpenAI 金鑰: {configStatus.openai ? `✅ 已設定 (${configStatus.openaiKeyLength} 字元)` : '❌ 未設定'}</p>
                 <p>LINE 推播: {configStatus.line ? '✅ 已設定' : '❌ 未設定'} (Token {configStatus.lineAccessToken ? '✅' : '❌'} / Secret {configStatus.lineChannelSecret ? '✅' : '❌'} / GroupID {configStatus.lineGroupId ? '✅' : '❌'})</p>
@@ -1958,7 +1958,7 @@ export default function App() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-stone-800 p-4 rounded-xl">
-                <p className="text-[10px] font-black text-stone-500 uppercase mb-2">統計資料</p>
+                <p className="text-[11px] font-black text-stone-500 uppercase mb-2">統計資料</p>
                 <div className="space-y-1 text-sm">
                   <p>總活動數: <span className="text-indigo-400 font-bold">{events.length}</span></p>
                   <p>篩選後數量: <span className="text-indigo-400 font-bold">{filteredEvents.length}</span></p>
@@ -1967,10 +1967,10 @@ export default function App() {
                 </div>
               </div>
               <div className="bg-stone-800 p-4 rounded-xl">
-                <p className="text-[10px] font-black text-stone-500 uppercase mb-2">最近 5 筆活動</p>
+                <p className="text-[11px] font-black text-stone-500 uppercase mb-2">最近 5 筆活動</p>
                 <div className="space-y-2">
                   {events.slice(0, 5).map(e => (
-                    <div key={e.id} className="text-[10px] border-b border-stone-700 pb-1 last:border-0">
+                    <div key={e.id} className="text-[11px] border-b border-stone-700 pb-1 last:border-0">
                       <p className="font-bold text-stone-200">{e.title} ({e.member_name})</p>
                       <p className="text-stone-500">{e.start_date} ~ {e.end_date}</p>
                     </div>
@@ -1981,20 +1981,20 @@ export default function App() {
               {/* LINE Webhook Real-time Diagnostic Logs */}
               <div className="col-span-1 md:col-span-2 bg-stone-800 p-4 rounded-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">
+                  <p className="text-[11px] font-black text-stone-400 uppercase tracking-wider">
                     🛰️ LINE Webhook 連結與語音診斷實時日誌
                   </p>
                   <div className="flex gap-2 self-start sm:self-auto">
                     <button 
                       onClick={fetchWebhookLogs}
                       disabled={isLoadingLogs}
-                      className="px-2 py-1 text-[10px] bg-indigo-600 hover:bg-indigo-505 disabled:bg-stone-700 text-white rounded transition-colors font-medium"
+                      className="px-2 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-505 disabled:bg-stone-700 text-white rounded transition-colors font-medium"
                     >
                       {isLoadingLogs ? '搜尋中...' : '重新整理日誌'}
                     </button>
                     <button 
                       onClick={clearWebhookLogs}
-                      className="px-2 py-1 text-[10px] bg-stone-700 hover:bg-red-650 hover:bg-red-600 text-white rounded transition-colors font-medium"
+                      className="px-2 py-1 text-[11px] bg-stone-700 hover:bg-red-650 hover:bg-red-600 text-white rounded transition-colors font-medium"
                     >
                       清空日誌
                     </button>
@@ -2007,85 +2007,85 @@ export default function App() {
                     <p className="font-bold text-stone-200">🛰️ Vercel 與伺服器環境變數載入狀態：</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Channel Secret</span>
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">LINE Channel Secret</span>
                         <div className="flex items-center gap-1.5">
                           {configStatus.lineChannelSecret ? (
                             <>
-                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
-                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.lineChannelSecretLength} 字元)</span>
+                              <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[10px]">({configStatus.lineChannelSecretLength} 字元)</span>
                             </>
                           ) : (
-                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                            <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
                           )}
                         </div>
                       </div>
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Access Token</span>
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">LINE Access Token</span>
                         <div className="flex items-center gap-1.5">
                           {configStatus.lineAccessToken ? (
                             <>
-                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
-                              <span className="text-stone-400 font-mono text-[9px]">({configStatus.lineAccessTokenLength} 字元)</span>
+                              <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
+                              <span className="text-stone-400 font-mono text-[10px]">({configStatus.lineAccessTokenLength} 字元)</span>
                             </>
                           ) : (
-                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                            <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
                           )}
                         </div>
                       </div>
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">LINE Group ID (群組ID)</span>
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">LINE Group ID (群組ID)</span>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {configStatus.lineGroupId ? (
                             <>
-                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
-                              <span className="text-indigo-400 font-mono text-[9px] break-all">{configStatus.lineGroupIdValue}</span>
+                              <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
+                              <span className="text-indigo-400 font-mono text-[10px] break-all">{configStatus.lineGroupIdValue}</span>
                             </>
                           ) : (
-                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                            <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
                           )}
                         </div>
                       </div>
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">OpenAI API Key (ChatGPT)</span>
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">OpenAI API Key (ChatGPT)</span>
                         <div className="flex items-center gap-1.5">
                           {configStatus.openai ? (
                             <>
-                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
-                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.openaiKeyLength} 字元)</span>
+                              <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[10px]">({configStatus.openaiKeyLength} 字元)</span>
                             </>
                           ) : (
-                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                            <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
                           )}
                         </div>
                       </div>
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">Firebase DB 連線</span>
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">Firebase DB 連線</span>
                         <div className="flex items-center gap-1.5">
                           {configStatus.firebase ? (
                             <>
-                              <span className="text-emerald-400 font-semibold text-[11px]">✅ 已設定</span>
-                              <span className="text-stone-500 font-mono text-[9px]">({configStatus.firebaseKeyLength} 字元)</span>
+                              <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
+                              <span className="text-stone-500 font-mono text-[10px]">({configStatus.firebaseKeyLength} 字元)</span>
                             </>
                           ) : (
-                            <span className="text-red-400 font-semibold text-[11px]">❌ 未設定</span>
+                            <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
                           )}
                         </div>
                       </div>
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
-                        <span className="text-stone-400 block mb-0.5 text-[10px] uppercase font-bold">目前執行端點</span>
-                        <span className="text-indigo-400 font-semibold font-mono text-[10px]">
+                        <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">目前執行端點</span>
+                        <span className="text-indigo-400 font-semibold font-mono text-[11px]">
                           {configStatus.env?.VERCEL ? "⚡ Vercel Serverless" : "💻 Local/Dev"} ({configStatus.env?.NODE_ENV})
                         </span>
                       </div>
                     </div>
 
                     {configStatus.lineSecretWarning && (
-                      <div className="mt-2 bg-red-950/60 text-red-200 border border-red-900/50 p-2.5 rounded text-[11px] leading-relaxed">
+                      <div className="mt-2 bg-red-950/60 text-red-200 border border-red-900/50 p-2.5 rounded text-[12px] leading-relaxed">
                         {configStatus.lineSecretWarning}
                       </div>
                     )}
@@ -2093,12 +2093,12 @@ export default function App() {
                 )}
                 
                 <div className="mt-2 bg-stone-950 p-3 rounded-lg overflow-x-auto border border-stone-800">
-                  <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-stone-300 max-h-60 overflow-y-auto scrollbar-thin select-text">
+                  <pre className="text-[12px] font-mono leading-relaxed whitespace-pre-wrap text-stone-300 max-h-60 overflow-y-auto scrollbar-thin select-text">
                     {webhookLogs}
                   </pre>
                 </div>
                 
-                <div className="mt-4 border-t border-stone-700/50 pt-3 text-[11px] text-stone-400 space-y-2">
+                <div className="mt-4 border-t border-stone-700/50 pt-3 text-[12px] text-stone-400 space-y-2">
                   <p className="font-semibold text-stone-300">💡 怎麼排除「語音/訊息沒有反應」的問題？</p>
                   <ol className="list-decimal list-inside space-y-1 text-stone-400">
                     <li>
@@ -2106,7 +2106,7 @@ export default function App() {
                     </li>
                     <li>
                       填入下方的 Webhook URL 網址並點擊 <strong className="text-amber-400 font-bold">Verify (驗證/測試)</strong> 按鈕：
-                      <div className="mt-1.5 flex items-center gap-1.5 bg-stone-950 px-2 py-1.5 rounded select-all font-mono text-[10px] text-emerald-400 border border-stone-850 break-all">
+                      <div className="mt-1.5 flex items-center gap-1.5 bg-stone-950 px-2 py-1.5 rounded select-all font-mono text-[11px] text-emerald-400 border border-stone-850 break-all">
                         {typeof window !== "undefined" ? window.location.origin : ""}/api/line/webhook
                       </div>
                     </li>
@@ -2128,7 +2128,7 @@ export default function App() {
           <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800">
             <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-800/80 backdrop-blur-md sticky top-[56px] md:top-[72px] z-30 rounded-t-2xl">
               {['日', '一', '二', '三', '四', '五', '六'].map(day => (
-                <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">
+                <div key={day} className="py-2 md:py-3 text-center text-[11px] md:text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">
                   {day}
                 </div>
               ))}
@@ -2236,24 +2236,24 @@ export default function App() {
                         )}>
                           {format(day, 'd')}
                         </span>
-                        <span className="text-[9px] md:text-[10px] text-stone-400 dark:text-stone-500 font-medium">
+                        <span className="text-[10px] md:text-[11px] text-stone-400 dark:text-stone-500 font-medium">
                           {getLunarDate(day)}
                         </span>
                         {weather && (
                           <div className="flex items-center gap-0.5 group relative">
                             {WEATHER_ICONS[weather.code]}
                             <div className="hidden md:flex flex-col items-start -space-y-0.5">
-                              <span className="text-[8px] text-stone-400 font-medium">
+                              <span className="text-[9px] text-stone-400 font-medium">
                                 {Math.round(weather.min)}°~{Math.round(weather.max)}°
                               </span>
                               {weather.pop !== undefined && (
-                                <span className="text-[8px] text-blue-500 dark:text-blue-400 font-bold flex items-center gap-0.5">
+                                <span className="text-[9px] text-blue-500 dark:text-blue-400 font-bold flex items-center gap-0.5">
                                   <CloudRain size={8} /> {weather.pop}%
                                 </span>
                               )}
                             </div>
                             {/* Tooltip for mobile or extra info */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[10px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[11px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200">
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-bold text-amber-400">{WEATHER_DESCRIPTIONS[weather.code] || '未知天氣'}</span>
                                 <span className="opacity-90">{Math.round(weather.min)}°C ~ {Math.round(weather.max)}°C</span>
@@ -2269,12 +2269,12 @@ export default function App() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         {holidayName && (
-                          <span className="text-[8px] md:text-[10px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
+                          <span className="text-[9px] md:text-[11px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
                             {holidayName}
                           </span>
                         )}
                         {makeupWorkdayName && (
-                          <span className="text-[8px] md:text-[10px] font-black text-stone-500 dark:text-stone-400 truncate bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700">
+                          <span className="text-[9px] md:text-[11px] font-black text-stone-500 dark:text-stone-400 truncate bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700">
                             {makeupWorkdayName}
                           </span>
                         )}
@@ -2286,7 +2286,7 @@ export default function App() {
                       <div className="hidden md:flex flex-col gap-1">
                         {daySlots.map((event, slotIndex) => {
                           if (!event) {
-                            return <div key={`empty-${slotIndex}`} className="h-[20px] invisible" />;
+                            return <div key={`empty-${slotIndex}`} className="h-[22px] invisible" />;
                           }
                           const eventTitle = String(event.title || '無標題');
                           const isLeave = eventTitle.includes('休') || eventTitle.includes('假');
@@ -2327,7 +2327,7 @@ export default function App() {
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
-                                "py-0.5 text-[10px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[20px]",
+                                "py-0.5 text-[11px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[22px]",
                                 isLeave && "ring-1 ring-inset ring-white/20",
                                 (event as any).syncing && "opacity-50 animate-pulse"
                               )}
@@ -2339,7 +2339,7 @@ export default function App() {
                           );
                         })}
                         {dayOverflow.length > 0 && (
-                          <div className="text-[9px] text-stone-400 font-black pl-1 flex items-center gap-1">
+                          <div className="text-[10px] text-stone-400 font-black pl-1 flex items-center gap-1">
                             <Plus size={8} /> {dayOverflow.length} 更多
                           </div>
                         )}
@@ -2349,7 +2349,7 @@ export default function App() {
                       <div className="md:hidden flex flex-col gap-0.5">
                         {mobileSlots.map((event, slotIndex) => {
                           if (!event) {
-                            return <div key={`empty-mobile-${slotIndex}`} className="h-[14px] invisible" />;
+                            return <div key={`empty-mobile-${slotIndex}`} className="h-[16px] invisible" />;
                           }
                           const eventTitle = String(event.title || '無標題');
                           const icon = getEventIcon(eventTitle, 8);
@@ -2380,7 +2380,7 @@ export default function App() {
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
-                                "py-0.5 text-[8px] font-bold truncate h-[14px] flex items-center gap-0.5",
+                                "py-0.5 text-[9px] font-bold truncate h-[16px] flex items-center gap-0.5",
                                 (event as any).syncing && "opacity-50 animate-pulse"
                               )}
                             >
@@ -2391,7 +2391,7 @@ export default function App() {
                           );
                         })}
                         {mobileOverflow.length > 0 && (
-                          <div className="text-[7px] text-stone-400 font-black pl-0.5">
+                          <div className="text-[8px] text-stone-400 font-black pl-0.5">
                             +{mobileOverflow.length}
                           </div>
                         )}
@@ -2429,7 +2429,7 @@ export default function App() {
                 </button>
               </div>
               <div className="p-5">
-                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">
+                <p className="text-[11px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">
                   選擇要{quickSelectType === 'leave' ? '排休' : '上班'}的成員：
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -2466,7 +2466,7 @@ export default function App() {
                 <Car size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月全家出遊</p>
+                <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月全家出遊</p>
                 <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
                   {events.filter(e => 
                     e.member_name === '全家' && 
@@ -2482,7 +2482,7 @@ export default function App() {
                 <Coffee size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月排休總計</p>
+                <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">本月排休總計</p>
                 <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
                   {events.filter(e => 
                     (String(e.title || '').includes('休') || String(e.title || '').includes('假')) && 
@@ -2494,7 +2494,7 @@ export default function App() {
 
             {/* Member Leave Stats */}
             <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col justify-center">
-              <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3">各成員排休天數</p>
+              <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3">各成員排休天數</p>
               <div className="flex flex-wrap gap-2">
                 {FAMILY_MEMBERS.filter(m => m !== '全家').map(member => {
                   const leaveCount = events.filter(e => 
@@ -2508,8 +2508,8 @@ export default function App() {
                   return (
                     <div key={member} className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-lg border border-stone-100 dark:border-stone-700">
                       <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
-                      <span className="text-[10px] font-bold text-stone-600 dark:text-stone-300">{member}</span>
-                      <span className="text-[10px] font-black text-stone-900 dark:text-stone-100">{leaveCount}</span>
+                      <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300">{member}</span>
+                      <span className="text-[11px] font-black text-stone-900 dark:text-stone-100">{leaveCount}</span>
                     </div>
                   );
                 })}
@@ -2532,7 +2532,7 @@ export default function App() {
                 <div className="w-1 h-5 bg-emerald-500 rounded-full" />
                 接下來的活動
               </h3>
-              <span className="text-[10px] font-bold text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">
+              <span className="text-[11px] font-bold text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">
                 近期 {upcomingEvents.length} 個活動
               </span>
             </div>
@@ -2553,7 +2553,7 @@ export default function App() {
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                           {getEventIcon(event.title || '', 16) || <User size={16} />}
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                        <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                           {event.member_name}
                         </span>
@@ -2599,7 +2599,7 @@ export default function App() {
                   <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10 flex items-center justify-between">
                     <span>{format(safeParseISO(date), 'MM月dd日 EEEE')} <span className="text-stone-400 dark:text-stone-600 font-medium ml-2">農曆 {getLunarDate(safeParseISO(date))}</span></span>
                     {weather && (
-                      <div className="flex items-center gap-2 text-[10px] normal-case tracking-normal font-bold">
+                      <div className="flex items-center gap-2 text-[11px] normal-case tracking-normal font-bold">
                         <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
                           {WEATHER_ICONS[weather.code]}
                           {WEATHER_DESCRIPTIONS[weather.code]}
@@ -2627,7 +2627,7 @@ export default function App() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                              <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                                 <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                                 {event.member_name}
                               </span>
@@ -2649,7 +2649,7 @@ export default function App() {
                             <h4 className="font-bold text-stone-900 dark:text-stone-100">{event.title}</h4>
                             <div className="flex items-center gap-2 mt-1">
                               {event.time && (
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
                                   <Clock size={10} /> {formatTimeDisplay(event.time)}
                                 </span>
                               )}
@@ -2684,7 +2684,7 @@ export default function App() {
           )}
         >
           <CalendarIcon size={20} />
-          <span className="text-[10px] font-black uppercase tracking-widest">月曆</span>
+          <span className="text-[11px] font-black uppercase tracking-widest">月曆</span>
         </button>
 
         <button 
@@ -2715,7 +2715,7 @@ export default function App() {
           )}
         >
           <Clock size={20} />
-          <span className="text-[10px] font-black uppercase tracking-widest">列表</span>
+          <span className="text-[11px] font-black uppercase tracking-widest">列表</span>
         </button>
       </nav>
       )}
@@ -2748,17 +2748,17 @@ export default function App() {
                 <Trash2 size={isElderlyMode ? 40 : 24} />
               </div>
               <h3 className={cn("font-black text-stone-900 dark:text-stone-100 mb-1", isElderlyMode ? "text-3xl" : "text-base")}>確定要刪除嗎？</h3>
-              <p className={cn("text-stone-500 dark:text-stone-400 font-medium mb-5", isElderlyMode ? "text-xl" : "text-[11px]")}>此操作將無法復原。</p>
+              <p className={cn("text-stone-500 dark:text-stone-400 font-medium mb-5", isElderlyMode ? "text-xl" : "text-[12px]")}>此操作將無法復原。</p>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className={cn("flex-1 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-black uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[10px]")}
+                  className={cn("flex-1 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-black uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[11px]")}
                 >
                   取消
                 </button>
                 <button 
                   onClick={executeDelete}
-                  className={cn("flex-1 bg-rose-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[10px]")}
+                  className={cn("flex-1 bg-rose-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none", isElderlyMode ? "px-6 py-4 text-2xl" : "px-3 py-2 text-[11px]")}
                 >
                   刪除
                 </button>
@@ -2781,7 +2781,7 @@ export default function App() {
                   </span>
                 </h2>
                 {editingEventId && (
-                  <span className={cn("text-stone-400 dark:text-stone-500 font-medium mt-0.5", isElderlyMode ? "text-lg" : "text-[10px]")}>
+                  <span className={cn("text-stone-400 dark:text-stone-500 font-medium mt-0.5", isElderlyMode ? "text-lg" : "text-[11px]")}>
                     原始日期: {newEvent.start_date}
                   </span>
                 )}
@@ -2955,7 +2955,7 @@ export default function App() {
                 <div className="flex items-center gap-3 py-2 px-1 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-100/50 dark:border-amber-900/20">
                   <div className="flex-1">
                     <label className={cn("block font-black text-amber-700 dark:text-amber-500 uppercase tracking-widest", isElderlyMode ? "text-xl" : "text-xs")}>標記為重要行程</label>
-                    <p className={cn("text-amber-600/60 dark:text-amber-500/40 font-bold", isElderlyMode ? "text-lg" : "text-[10px]")}>此行程將會顯示在置頂區域並同步至 LINE 重要通知</p>
+                    <p className={cn("text-amber-600/60 dark:text-amber-500/40 font-bold", isElderlyMode ? "text-lg" : "text-[11px]")}>此行程將會顯示在置頂區域並同步至 LINE 重要通知</p>
                   </div>
                   <button
                     type="button"
@@ -3010,7 +3010,7 @@ export default function App() {
                     <span className="text-stone-400 dark:text-stone-500">
                       {WEATHER_ICONS[weatherData[format(selectedDay, 'yyyy-MM-dd')].code]}
                     </span>
-                    <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400">
+                    <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400">
                       {WEATHER_DESCRIPTIONS[weatherData[format(selectedDay, 'yyyy-MM-dd')].code]} · {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].min)}°C ~ {Math.round(weatherData[format(selectedDay, 'yyyy-MM-dd')].max)}°C
                       {weatherData[format(selectedDay, 'yyyy-MM-dd')].pop !== undefined && (
                         <span className="ml-1.5 text-blue-500 dark:text-blue-400 font-black">
@@ -3066,7 +3066,7 @@ export default function App() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
+                          <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit" style={{ backgroundColor: `${event.color || '#4F46E5'}15`, color: event.color || '#4F46E5' }}>
                             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: event.color || '#4F46E5' }} />
                             {event.member_name}
                           </span>
@@ -3094,13 +3094,13 @@ export default function App() {
                         <h4 className="font-black text-stone-900 text-base truncate">{event.title}</h4>
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {event.time && (
-                            <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-50/50 px-1.5 py-0.5 rounded-md">
+                            <div className="flex items-center gap-1 text-[12px] font-bold text-indigo-600 bg-indigo-50/50 px-1.5 py-0.5 rounded-md">
                               <Clock size={12} />
                               {formatTimeDisplay(event.time)}
                             </div>
                           )}
                           {event.description && (
-                            <div className="flex items-center gap-1 text-[11px] font-medium text-stone-500">
+                            <div className="flex items-center gap-1 text-[12px] font-medium text-stone-500">
                               <Filter size={12} className="opacity-50" />
                               <span className="truncate max-w-[150px]">{event.description}</span>
                             </div>
@@ -3147,7 +3147,7 @@ export default function App() {
             title="開啟 AI 智慧小幫手"
           >
             <Sparkles size={24} className="animate-pulse" />
-            <span className="absolute -top-1 -right-1 bg-rose-600 text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">
+            <span className="absolute -top-1 -right-1 bg-rose-600 text-[11px] text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">
               AI
             </span>
           </button>
@@ -3167,7 +3167,7 @@ export default function App() {
                       "w-1.5 h-1.5 rounded-full",
                       configStatus?.openai ? "bg-emerald-400 animate-pulse" : "bg-stone-400"
                     )} />
-                    <span className="text-[9px] text-indigo-100/80 font-bold tracking-wider">
+                    <span className="text-[10px] text-indigo-100/80 font-bold tracking-wider">
                       {configStatus?.openai ? "ChatGPT 智慧模組" : "未設定金鑰"}
                     </span>
                   </div>
@@ -3213,7 +3213,7 @@ export default function App() {
                     <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="font-black mb-1">⚠️ 需要設定 ChatGPT API 金鑰</p>
-                      <p className="font-medium text-[11px] leading-normal opacity-90">
+                      <p className="font-medium text-[12px] leading-normal opacity-90">
                         目前尚未設定 OpenAI 金鑰。請在 AI Studio 專案的 <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded font-black text-amber-700 dark:text-amber-400">Settings</span> 頁面，點選 Secrets 新增一個變數名稱為 <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded font-mono font-black text-amber-700 dark:text-amber-400">OPENAI_API_KEY</span> 的金鑰，並填入您的 OpenAI 密鑰，即可解鎖 ChatGPT AI 小秘書！
                       </p>
                     </div>
