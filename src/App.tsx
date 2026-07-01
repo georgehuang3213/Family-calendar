@@ -146,9 +146,9 @@ const WEATHER_ICONS: Record<number, React.ReactNode> = {
   80: <CloudRain size={14} className="text-blue-500" />, // Rain showers: Slight
   81: <CloudRain size={14} className="text-blue-600" />, // Rain showers: Moderate
   82: <CloudRain size={14} className="text-blue-700" />, // Rain showers: Violent
-  95: <CloudLightning size={14} className="text-indigo-500" />, // Thunderstorm: Slight or moderate
-  96: <CloudLightning size={14} className="text-indigo-600" />, // Thunderstorm with slight hail
-  99: <CloudLightning size={14} className="text-indigo-700" />, // Thunderstorm with heavy hail
+  95: <CloudLightning size={14} className="text-orange-500" />, // Thunderstorm: Slight or moderate
+  96: <CloudLightning size={14} className="text-orange-600" />, // Thunderstorm with slight hail
+  99: <CloudLightning size={14} className="text-orange-700" />, // Thunderstorm with heavy hail
 };
 const WEATHER_DESCRIPTIONS: Record<number, string> = {
   0: '晴朗',
@@ -1380,9 +1380,9 @@ export default function App() {
   // 登入閘門:通過家庭通行碼前，只顯示載入或登入畫面
   if (authChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
+      <div className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-stone-950">
         <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
-          <Clock size={20} className="animate-spin text-indigo-600" />
+          <Clock size={20} className="animate-spin text-orange-600" />
           <span className="text-sm font-bold">載入中…</span>
         </div>
       </div>
@@ -1391,10 +1391,10 @@ export default function App() {
 
   if (!authed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-stone-950 p-4">
         <div className="w-full max-w-sm bg-white dark:bg-stone-900 rounded-2xl shadow-xl border border-stone-200 dark:border-stone-800 p-8">
           <div className="flex flex-col items-center text-center mb-6">
-            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-3">
+            <div className="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-3">
               <CalendarIcon size={28} />
             </div>
             <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">家庭行事曆</h1>
@@ -1407,13 +1407,13 @@ export default function App() {
               onChange={e => setKeyInput(e.target.value)}
               autoFocus
               placeholder="家庭通行碼"
-              className="w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3 text-sm font-medium text-stone-900 dark:text-stone-100 outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3 text-sm font-medium text-stone-900 dark:text-stone-100 outline-none focus:ring-2 focus:ring-orange-500"
             />
             {keyError && <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{keyError}</p>}
             <button
               type="submit"
               disabled={!keyInput.trim() || authSubmitting}
-              className="w-full bg-indigo-600 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 hover:bg-indigo-700 transition-colors"
+              className="w-full bg-orange-600 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 hover:bg-orange-700 transition-colors"
             >
               {authSubmitting ? '驗證中…' : '進入'}
             </button>
@@ -1425,13 +1425,13 @@ export default function App() {
 
   return (
     <div className={cn(
-      "min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans pb-24 md:pb-0 transition-colors duration-300",
+      "min-h-screen bg-orange-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans pb-24 md:pb-0 transition-colors duration-300",
       isDarkMode && "dark"
     )}>
       {/* Header - Simplified for Mobile */}
       <header className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200 flex-shrink-0">
             <CalendarIcon size={16} className="md:hidden" />
             <CalendarIcon size={24} className="hidden md:block" />
           </div>
@@ -1452,10 +1452,10 @@ export default function App() {
         <div className="flex items-center gap-1.5 md:gap-4">
           <button 
             onClick={() => fetchEvents(true)}
-            className="p-2 text-stone-500 hover:text-indigo-600 dark:text-stone-400 dark:hover:text-indigo-400 transition-colors bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg shadow-sm"
+            className="p-2 text-stone-500 hover:text-orange-600 dark:text-stone-400 dark:hover:text-orange-400 transition-colors bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg shadow-sm"
             title="重新整理"
           >
-            <Zap size={16} className={cn(loading && "animate-pulse text-indigo-500")} />
+            <Zap size={16} className={cn(loading && "animate-pulse text-orange-500")} />
           </button>
 
           <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5 md:p-1">
@@ -1516,7 +1516,7 @@ export default function App() {
               });
               setIsModalOpen(true);
             }}
-            className="hidden md:flex bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
+            className="hidden md:flex bg-orange-600 text-white px-4 py-2 rounded-lg font-bold items-center gap-2 hover:bg-orange-700 transition-colors shadow-sm"
           >
             <Plus size={20} />
             <span>新增活動</span>
@@ -1610,7 +1610,7 @@ export default function App() {
               }
 
               const dayTheme = isToday 
-                ? { border: 'border-indigo-100 dark:border-indigo-900', text: 'text-indigo-700 dark:text-indigo-400', accent: 'text-indigo-600 dark:text-indigo-400' }
+                ? { border: 'border-orange-100 dark:border-orange-900', text: 'text-orange-700 dark:text-orange-400', accent: 'text-orange-600 dark:text-orange-400' }
                 : isTomorrow 
                   ? { border: 'border-emerald-100 dark:border-emerald-900', text: 'text-emerald-700 dark:text-emerald-400', accent: 'text-emerald-600 dark:text-emerald-400' }
                   : { border: 'border-stone-100 dark:border-stone-800', text: 'text-stone-700 dark:text-stone-300', accent: 'text-stone-600 dark:text-stone-400' };
@@ -1696,7 +1696,7 @@ export default function App() {
                 });
                 setIsModalOpen(true);
               }}
-              className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black text-3xl flex items-center justify-center gap-4 shadow-xl active:scale-95 transition-transform"
+              className="w-full bg-orange-600 text-white py-6 rounded-3xl font-black text-3xl flex items-center justify-center gap-4 shadow-xl active:scale-95 transition-transform"
             >
               <Plus size={40} />
               新增活動
@@ -1706,7 +1706,7 @@ export default function App() {
           <>
         {/* Today's Weather Overview (Mobile Only) */}
         {currentWeather && (
-          <div className="md:hidden bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden">
+          <div className="md:hidden bg-gradient-to-br from-orange-600 to-violet-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-orange-200 dark:shadow-none relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Cloud size={120} />
             </div>
@@ -1758,7 +1758,7 @@ export default function App() {
             onClick={() => setViewMode('calendar')}
             className={cn(
               "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-              viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
+              viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400" : "text-stone-500 dark:text-stone-400"
             )}
           >
             月曆模式
@@ -1767,7 +1767,7 @@ export default function App() {
             onClick={() => setViewMode('list')}
             className={cn(
               "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-              viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
+              viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400" : "text-stone-500 dark:text-stone-400"
             )}
           >
             列表模式
@@ -1809,11 +1809,11 @@ export default function App() {
                 className={cn(
                   "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
                   isQuickWorkEnabled 
-                    ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 shadow-sm"
+                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 shadow-sm"
                     : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                 )}
               >
-                <Zap size={12} className={isQuickWorkEnabled ? "text-indigo-500" : "text-stone-400"} />
+                <Zap size={12} className={isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
                 一鍵上班
               </button>
 
@@ -1879,7 +1879,7 @@ export default function App() {
                   onClick={() => setViewMode('calendar')}
                   className={cn(
                     "px-3 py-1 rounded-md text-[11px] font-bold transition-all",
-                    viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
+                    viewMode === 'calendar' ? "bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
                   月曆
@@ -1888,7 +1888,7 @@ export default function App() {
                   onClick={() => setViewMode('list')}
                   className={cn(
                     "px-3 py-1 rounded-md text-[11px] font-bold transition-all",
-                    viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-stone-500 dark:text-stone-400"
+                    viewMode === 'list' ? "bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400" : "text-stone-500 dark:text-stone-400"
                   )}
                 >
                   列表
@@ -1948,7 +1948,7 @@ export default function App() {
                 <h3 className="font-black text-xs uppercase tracking-widest text-stone-400">偵錯資訊 (Raw Data)</h3>
                 <button 
                   onClick={fetchEvents}
-                  className="p-1 text-stone-500 hover:text-indigo-400 transition-colors"
+                  className="p-1 text-stone-500 hover:text-orange-400 transition-colors"
                   title="重新整理"
                 >
                   <Zap size={14} />
@@ -1960,8 +1960,8 @@ export default function App() {
               <div className="bg-stone-800 p-4 rounded-xl">
                 <p className="text-[11px] font-black text-stone-500 uppercase mb-2">統計資料</p>
                 <div className="space-y-1 text-sm">
-                  <p>總活動數: <span className="text-indigo-400 font-bold">{events.length}</span></p>
-                  <p>篩選後數量: <span className="text-indigo-400 font-bold">{filteredEvents.length}</span></p>
+                  <p>總活動數: <span className="text-orange-400 font-bold">{events.length}</span></p>
+                  <p>篩選後數量: <span className="text-orange-400 font-bold">{filteredEvents.length}</span></p>
                   <p>儲存來源: <span className="text-emerald-400 font-bold">{storageSource}</span></p>
                   {warning && <p className="text-amber-400 text-xs mt-2">警告: {warning}</p>}
                 </div>
@@ -1988,7 +1988,7 @@ export default function App() {
                     <button 
                       onClick={fetchWebhookLogs}
                       disabled={isLoadingLogs}
-                      className="px-2 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-505 disabled:bg-stone-700 text-white rounded transition-colors font-medium"
+                      className="px-2 py-1 text-[11px] bg-orange-600 hover:bg-orange-700 disabled:bg-stone-700 text-white rounded transition-colors font-medium"
                     >
                       {isLoadingLogs ? '搜尋中...' : '重新整理日誌'}
                     </button>
@@ -2040,7 +2040,7 @@ export default function App() {
                           {configStatus.lineGroupId ? (
                             <>
                               <span className="text-emerald-400 font-semibold text-[12px]">✅ 已設定</span>
-                              <span className="text-indigo-400 font-mono text-[10px] break-all">{configStatus.lineGroupIdValue}</span>
+                              <span className="text-orange-400 font-mono text-[10px] break-all">{configStatus.lineGroupIdValue}</span>
                             </>
                           ) : (
                             <span className="text-red-400 font-semibold text-[12px]">❌ 未設定</span>
@@ -2078,7 +2078,7 @@ export default function App() {
 
                       <div className="bg-stone-950 p-2 rounded border border-stone-850">
                         <span className="text-stone-400 block mb-0.5 text-[11px] uppercase font-bold">目前執行端點</span>
-                        <span className="text-indigo-400 font-semibold font-mono text-[11px]">
+                        <span className="text-orange-400 font-semibold font-mono text-[11px]">
                           {configStatus.env?.VERCEL ? "⚡ Vercel Serverless" : "💻 Local/Dev"} ({configStatus.env?.NODE_ENV})
                         </span>
                       </div>
@@ -2114,7 +2114,7 @@ export default function App() {
                       <strong className="text-stone-300">極重要關鍵：</strong>確保下方欄位 <strong className="text-amber-400 font-bold">Use webhook</strong> 的開關已經打開 (<strong className="text-emerald-400 font-semibold">Enabled</strong>)！預設往往是關閉。
                     </li>
                     <li>
-                      確認 AI Studio Settings -&gt; Secrets 設定的 <strong className="text-stone-300">LINE_CHANNEL_SECRET</strong> 是 <strong className="text-indigo-400">32 字元的 Channel Secret</strong> 密鑰（而非 Channel ID 或 Token。若簽名校驗失敗，日誌會顯示 Response status 401）。
+                      確認 AI Studio Settings -&gt; Secrets 設定的 <strong className="text-stone-300">LINE_CHANNEL_SECRET</strong> 是 <strong className="text-orange-400">32 字元的 Channel Secret</strong> 密鑰（而非 Channel ID 或 Token。若簽名校驗失敗，日誌會顯示 Response status 401）。
                     </li>
                   </ol>
                 </div>
@@ -2223,7 +2223,7 @@ export default function App() {
                     className={cn(
                       "min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 dark:border-stone-800 last:border-r-0 transition-all cursor-pointer relative",
                       !isCurrentMonth && "bg-stone-50/30 dark:bg-stone-800/30",
-                      isSelected && "bg-indigo-50/50 dark:bg-indigo-900/20 ring-2 ring-inset ring-indigo-400 z-10",
+                      isSelected && "bg-orange-50/50 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-400 z-10",
                       isHoliday && "bg-rose-50/30 dark:bg-rose-900/10",
                       makeupWorkdayName && "bg-stone-100/50 dark:bg-stone-800/50"
                     )}
@@ -2232,7 +2232,7 @@ export default function App() {
                       <div className="flex items-center gap-1">
                         <span className={cn(
                           "w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-xs md:text-sm font-bold",
-                          isToday ? "bg-indigo-600 text-white shadow-md" : (isHoliday || isWeekend) ? "text-rose-600 dark:text-rose-400" : isCurrentMonth ? "text-stone-900 dark:text-stone-100" : "text-stone-300 dark:text-stone-600"
+                          isToday ? "bg-orange-600 text-white shadow-md" : (isHoliday || isWeekend) ? "text-rose-600 dark:text-rose-400" : isCurrentMonth ? "text-stone-900 dark:text-stone-100" : "text-stone-300 dark:text-stone-600"
                         )}>
                           {format(day, 'd')}
                         </span>
@@ -2416,7 +2416,7 @@ export default function App() {
             >
               <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Zap size={18} className={quickSelectType === 'leave' ? "text-amber-500" : "text-indigo-500"} />
+                  <Zap size={18} className={quickSelectType === 'leave' ? "text-amber-500" : "text-orange-500"} />
                   <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest">
                     快速{quickSelectType === 'leave' ? '排休' : '上班'} ({format(selectedDay, 'MM/dd')})
                   </h3>
@@ -2566,7 +2566,7 @@ export default function App() {
                     <h4 className="font-black text-stone-900 dark:text-stone-100 text-base truncate">{event.title}</h4>
                     <div className="flex items-center gap-3 mt-auto pt-2">
                       {event.time && (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 px-2 py-1 rounded-lg">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50/50 dark:bg-orange-900/20 px-2 py-1 rounded-lg">
                           <Clock size={14} />
                           {formatTimeDisplay(event.time)}
                         </div>
@@ -2634,7 +2634,7 @@ export default function App() {
                               <div className="flex items-center gap-2">
                                 <button 
                                   onClick={() => handleEditClick(event)}
-                                  className="p-1 text-stone-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                  className="p-1 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                                 >
                                   <Edit size={16} />
                                 </button>
@@ -2649,7 +2649,7 @@ export default function App() {
                             <h4 className="font-bold text-stone-900 dark:text-stone-100">{event.title}</h4>
                             <div className="flex items-center gap-2 mt-1">
                               {event.time && (
-                                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
                                   <Clock size={10} /> {formatTimeDisplay(event.time)}
                                 </span>
                               )}
@@ -2680,7 +2680,7 @@ export default function App() {
           onClick={() => setViewMode('calendar')}
           className={cn(
             "flex flex-col items-center gap-1 transition-all",
-            viewMode === 'calendar' ? "text-indigo-600 dark:text-indigo-400" : "text-stone-400 dark:text-stone-500"
+            viewMode === 'calendar' ? "text-orange-600 dark:text-orange-400" : "text-stone-400 dark:text-stone-500"
           )}
         >
           <CalendarIcon size={20} />
@@ -2702,7 +2702,7 @@ export default function App() {
             });
             setIsModalOpen(true);
           }}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center -translate-y-8 border-4 border-stone-50 dark:border-stone-950 active:scale-90 transition-all"
+          className="w-14 h-14 bg-orange-600 text-white rounded-full shadow-xl flex items-center justify-center -translate-y-8 border-4 border-stone-50 dark:border-stone-950 active:scale-90 transition-all"
         >
           <Plus size={28} />
         </button>
@@ -2711,7 +2711,7 @@ export default function App() {
           onClick={() => setViewMode('list')}
           className={cn(
             "flex flex-col items-center gap-1 transition-all",
-            viewMode === 'list' ? "text-indigo-600 dark:text-indigo-400" : "text-stone-400 dark:text-stone-500"
+            viewMode === 'list' ? "text-orange-600 dark:text-orange-400" : "text-stone-400 dark:text-stone-500"
           )}
         >
           <Clock size={20} />
@@ -2806,7 +2806,7 @@ export default function App() {
                     type="text" 
                     value={newEvent.title || ''}
                     onChange={e => setNewEvent({...newEvent, title: e.target.value})}
-                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
+                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                     placeholder="例如：家族聚餐"
                   />
                 </div>
@@ -2827,7 +2827,7 @@ export default function App() {
                           end_date: (prev.end_date === prev.start_date || prev.end_date < v) ? v : prev.end_date,
                         }));
                       }}
-                      className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
+                      className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                     />
                   </div>
                   {!['請假', '排休', '特休', '補休', '公休'].includes(newEvent.title || '') && (
@@ -2838,14 +2838,14 @@ export default function App() {
                         type="date" 
                         value={newEvent.end_date || ''}
                         onChange={e => setNewEvent({...newEvent, end_date: e.target.value})}
-                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                   )}
                 </div>
 
                 {newEvent.start_date && newEvent.end_date && newEvent.end_date > newEvent.start_date && (
-                  <p className={cn("font-bold text-indigo-600 dark:text-indigo-400", isElderlyMode ? "text-lg" : "text-xs")}>
+                  <p className={cn("font-bold text-orange-600 dark:text-orange-400", isElderlyMode ? "text-lg" : "text-xs")}>
                     📅 跨 {Math.round((new Date(newEvent.end_date).getTime() - new Date(newEvent.start_date).getTime()) / 86400000) + 1} 天
                   </p>
                 )}
@@ -2856,7 +2856,7 @@ export default function App() {
                     id="is_important"
                     checked={newEvent.is_important || false}
                     onChange={e => setNewEvent({ ...newEvent, is_important: e.target.checked })}
-                    className="w-5 h-5 text-indigo-600 bg-stone-100 border-stone-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-stone-800 focus:ring-2 dark:bg-stone-700 dark:border-stone-600 cursor-pointer"
+                    className="w-5 h-5 text-orange-600 bg-stone-100 border-stone-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-stone-800 focus:ring-2 dark:bg-stone-700 dark:border-stone-600 cursor-pointer"
                   />
                   <label htmlFor="is_important" className={cn("font-bold text-rose-600 dark:text-rose-400 flex items-center cursor-pointer", isElderlyMode ? "text-xl" : "text-sm")}>
                     🚀 設為重要 (LINE推播置頂公告)
@@ -2871,7 +2871,7 @@ export default function App() {
                         type="time" 
                         value={newEvent.start_time || ''}
                         onChange={e => setNewEvent({...newEvent, start_time: e.target.value})}
-                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                     <div>
@@ -2880,7 +2880,7 @@ export default function App() {
                         type="time" 
                         value={newEvent.end_time || ''}
                         onChange={e => setNewEvent({...newEvent, end_time: e.target.value})}
-                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
+                        className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl" : "px-4 py-2.5 text-sm")}
                       />
                     </div>
                   </div>
@@ -2947,7 +2947,7 @@ export default function App() {
                   <textarea 
                     value={newEvent.description || ''}
                     onChange={e => setNewEvent({...newEvent, description: e.target.value})}
-                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl min-h-[120px]" : "px-4 py-2.5 text-sm min-h-[80px]")}
+                    className={cn("w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all resize-none font-medium text-stone-900 dark:text-stone-100", isElderlyMode ? "px-6 py-4 text-2xl min-h-[120px]" : "px-4 py-2.5 text-sm min-h-[80px]")}
                     placeholder="活動細節..."
                   />
                 </div>
@@ -2975,7 +2975,7 @@ export default function App() {
                 <div className="pt-2 pb-6 md:pb-2">
                   <button 
                     type="submit"
-                    className={cn("w-full bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200 dark:shadow-none", isElderlyMode ? "py-6 text-3xl" : "py-3.5 text-sm")}
+                    className={cn("w-full bg-orange-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-orange-700 active:scale-[0.98] transition-all shadow-lg shadow-orange-200 dark:shadow-none", isElderlyMode ? "py-6 text-3xl" : "py-3.5 text-sm")}
                   >
                     {editingEventId ? '更新活動' : '儲存活動'}
                   </button>
@@ -2999,7 +2999,7 @@ export default function App() {
             <div className="px-5 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
               <div className="flex flex-col">
                 <h3 className="text-base font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
+                  <div className="w-1.5 h-4 bg-orange-600 rounded-full" />
                   {format(selectedDay, 'MM月dd日')} 活動
                   <span className="text-stone-400 dark:text-stone-500 font-medium text-xs ml-1">
                     農曆 {getLunarDate(selectedDay)}
@@ -3052,7 +3052,7 @@ export default function App() {
                       });
                       setIsModalOpen(true);
                     }}
-                    className="mt-4 text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline"
+                    className="mt-4 text-xs font-black text-orange-600 dark:text-orange-400 hover:underline"
                   >
                     + 點擊新增活動
                   </button>
@@ -3076,7 +3076,7 @@ export default function App() {
                                 setIsDayModalOpen(false);
                                 handleEditClick(event);
                               }}
-                              className="w-7 h-7 flex items-center justify-center text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all"
+                              className="w-7 h-7 flex items-center justify-center text-stone-400 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-all"
                             >
                               <Edit size={14} />
                             </button>
@@ -3094,7 +3094,7 @@ export default function App() {
                         <h4 className="font-black text-stone-900 text-base truncate">{event.title}</h4>
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {event.time && (
-                            <div className="flex items-center gap-1 text-[12px] font-bold text-indigo-600 bg-indigo-50/50 px-1.5 py-0.5 rounded-md">
+                            <div className="flex items-center gap-1 text-[12px] font-bold text-orange-600 bg-orange-50/50 px-1.5 py-0.5 rounded-md">
                               <Clock size={12} />
                               {formatTimeDisplay(event.time)}
                             </div>
@@ -3125,7 +3125,7 @@ export default function App() {
                       });
                       setIsModalOpen(true);
                     }}
-                    className="w-full py-3 mt-2 border-2 border-dashed border-stone-200 rounded-xl text-xs font-black text-stone-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 mt-2 border-2 border-dashed border-stone-200 rounded-xl text-xs font-black text-stone-400 hover:text-orange-600 hover:border-orange-200 hover:bg-orange-50 transition-all flex items-center justify-center gap-2"
                   >
                     <Plus size={16} /> 新增活動至這天
                   </button>
@@ -3143,7 +3143,7 @@ export default function App() {
           <button 
             id="ai-assistant-toggle"
             onClick={() => setIsChatOpen(true)}
-            className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all relative border-2 border-white/25 hover:shadow-indigo-500/20 cursor-pointer"
+            className="w-14 h-14 bg-gradient-to-tr from-orange-600 to-violet-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all relative border-2 border-white/25 hover:shadow-orange-500/20 cursor-pointer"
             title="開啟 AI 智慧小幫手"
           >
             <Sparkles size={24} className="animate-pulse" />
@@ -3157,9 +3157,9 @@ export default function App() {
         {isChatOpen && (
           <div className="w-[calc(100vw-32px)] sm:w-[380px] h-[480px] bg-white dark:bg-stone-900 border border-stone-250 dark:border-stone-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-4 py-3.5 flex items-center justify-between shadow-sm">
+            <div className="bg-gradient-to-r from-orange-600 to-violet-600 text-white px-4 py-3.5 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-2">
-                <Sparkles size={18} className="text-indigo-100" />
+                <Sparkles size={18} className="text-orange-100" />
                 <div className="flex flex-col select-none">
                   <span className="font-black text-sm tracking-tight leading-tight">AI 家庭小秘書</span>
                   <div className="flex items-center gap-1">
@@ -3167,7 +3167,7 @@ export default function App() {
                       "w-1.5 h-1.5 rounded-full",
                       configStatus?.openai ? "bg-emerald-400 animate-pulse" : "bg-stone-400"
                     )} />
-                    <span className="text-[10px] text-indigo-100/80 font-bold tracking-wider">
+                    <span className="text-[10px] text-orange-100/80 font-bold tracking-wider">
                       {configStatus?.openai ? "ChatGPT 智慧模組" : "未設定金鑰"}
                     </span>
                   </div>
@@ -3189,7 +3189,7 @@ export default function App() {
                   className={cn(
                     "flex flex-col max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed shadow-sm",
                     msg.role === 'user' 
-                      ? "bg-indigo-600 text-white ml-auto rounded-tr-none" 
+                      ? "bg-orange-600 text-white ml-auto rounded-tr-none" 
                       : "bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-tl-none border border-stone-200/50 dark:border-stone-700/55 whitespace-pre-wrap"
                   )}
                 >
@@ -3199,9 +3199,9 @@ export default function App() {
               {isAILoading && (
                 <div className="bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200/50 dark:border-stone-700/55 rounded-2xl rounded-tl-none p-3 text-xs w-[120px] shadow-sm flex items-center gap-2 select-none">
                   <div className="flex gap-1">
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                   <span className="font-bold">思考中...</span>
                 </div>
@@ -3231,12 +3231,12 @@ export default function App() {
                 onChange={(e) => setChatInput(e.target.value)}
                 disabled={isAILoading || !configStatus?.openai}
                 placeholder={configStatus?.openai ? "請輸入指令查詢或幫我排程..." : "請先完成 Secrets 金鑰設定"}
-                className="flex-1 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 px-3.5 py-2.5 rounded-2xl text-xs font-bold outline-none border border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-stone-800 transition-all disabled:opacity-50"
+                className="flex-1 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 px-3.5 py-2.5 rounded-2xl text-xs font-bold outline-none border border-transparent focus:border-orange-500 focus:bg-white dark:focus:bg-stone-800 transition-all disabled:opacity-50"
               />
               <button 
                 type="submit"
                 disabled={!chatInput.trim() || isAILoading || !configStatus?.openai}
-                className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100 flex-shrink-0 cursor-pointer"
+                className="w-9 h-9 rounded-2xl bg-orange-600 text-white flex items-center justify-center shadow-md hover:bg-orange-700 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100 flex-shrink-0 cursor-pointer"
               >
                 <Send size={15} />
               </button>
@@ -3247,7 +3247,7 @@ export default function App() {
 
       {loading && (
         <div className="fixed bottom-24 md:bottom-6 right-24 md:right-24 bg-white dark:bg-stone-800 px-4 py-2 rounded-full shadow-lg border border-stone-100 dark:border-stone-700 flex items-center gap-2 animate-pulse z-20">
-          <Clock size={16} className="text-indigo-600 animate-spin" />
+          <Clock size={16} className="text-orange-600 animate-spin" />
           <span className="text-xs font-bold text-stone-600 dark:text-stone-400 uppercase tracking-wider">同步中</span>
         </div>
       )}
