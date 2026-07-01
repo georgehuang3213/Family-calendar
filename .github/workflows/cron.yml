@@ -1,0 +1,31 @@
+name: Family Calendar Cron
+
+# Vercel serverless 容器不會常駐，站內 node-cron 幾乎不會準時觸發；
+# Vercel Hobby 方案自帶的 crons 也會固定延遲約 19 分。改由這裡準點呼叫正式站的 cron 端點。
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 每日總結推播：07:00 台北時間（UTC+8）= 前一天 23:00 UTC
+    - cron: '*/5 * * * *'  # 重要行程「提前 1 小時」提醒；伺服器端比對容許 ±5 分鐘誤差，需配合此頻率才不會漏掉
+  workflow_dispatch: {}     # 手動觸發，方便測試
+
+env:
+  APP_URL: https://family-calendar-bay-gamma.vercel.app
+
+jobs:
+  daily-push:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 23 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/daily-push
+        run: |
+          curl -sf --max-time 65 "$APP_URL/api/cron/daily-push" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+  hourly-reminder:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/hourly-reminder
+        run: |
+          curl -sf --max-time 65 "$APP_URL/api/cron/hourly-reminder" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

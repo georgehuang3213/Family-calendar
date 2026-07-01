@@ -1,10 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/daily-push",
-      "schedule": "0 23 * * *"
-    }
-  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
     { "source": "/(.*)", "destination": "/index.html" }

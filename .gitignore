@@ -11,3 +11,6 @@ dist/
 # FamilySync Calendar Data
 events.db
 events.db-journal
+
+# Playwright MCP debug artifacts
+.playwright-mcp/

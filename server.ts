@@ -7,7 +7,6 @@ import { middleware, Client, WebhookEvent } from '@line/bot-sdk';
 import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from "fs";
-import cron from "node-cron";
 import { askChatGPT, transcribeAudio } from "./gptService.js";
 
 dotenv.config();
@@ -188,6 +187,45 @@ async function getEventsRev(database: any): Promise<number> {
   return rev;
 }
 
+// --- REST 事件欄位驗證 ---
+// 只有 AI 聊天路徑（gptService.ts）原本會驗證 member_name；REST CRUD 端點直接信任前端傳來的資料。
+// 這裡補上伺服器端驗證，避免壞資料（未知成員、錯誤日期格式等）寫入 Firestore。
+const FAMILY_MEMBERS = ['全家', '江雪卿', '黃喬裕', '陳愉婷', '黃宣綾', '黃宣綸', '黃郁婷', '郭力維', '黃郁慈', '郭品佑', '郭品彤'];
+const EVENT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const EVENT_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+// 舊資料/前端某些流程（如編輯 legacy 事件）可能產生沒補零的日期，例如 "2026-3-8"。
+// 存進 Firestore 前先正規化成 "2026-03-08"，避免這類舊資料一碰就被擋掉（同時順便清理資料）。
+function normalizeEventDate(value: any): any {
+  if (typeof value !== 'string') return value;
+  const m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return value;
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+}
+
+// isCreate=true（POST）時必填欄位缺一不可；isCreate=false（PUT 局部更新）只驗證「有帶到」的欄位格式。
+function validateEventFields(body: any, isCreate: boolean): string | null {
+  if (isCreate) {
+    if (typeof body.title !== 'string' || !body.title.trim()) return 'title 為必填字串';
+    if (typeof body.start_date !== 'string' || !EVENT_DATE_RE.test(body.start_date)) return 'start_date 格式需為 YYYY-MM-DD';
+    if (typeof body.end_date !== 'string' || !EVENT_DATE_RE.test(body.end_date)) return 'end_date 格式需為 YYYY-MM-DD';
+    if (typeof body.member_name !== 'string' || !FAMILY_MEMBERS.includes(body.member_name)) return 'member_name 不在家庭成員名單內';
+  } else {
+    if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim())) return 'title 不可為空字串';
+    if (body.start_date !== undefined && (typeof body.start_date !== 'string' || !EVENT_DATE_RE.test(body.start_date))) return 'start_date 格式需為 YYYY-MM-DD';
+    if (body.end_date !== undefined && (typeof body.end_date !== 'string' || !EVENT_DATE_RE.test(body.end_date))) return 'end_date 格式需為 YYYY-MM-DD';
+    if (body.member_name !== undefined && !FAMILY_MEMBERS.includes(body.member_name)) return 'member_name 不在家庭成員名單內';
+  }
+  if (body.start_date !== undefined && body.end_date !== undefined && body.end_date < body.start_date) return 'end_date 不可早於 start_date';
+  if (body.color !== undefined && !EVENT_COLOR_RE.test(body.color)) return 'color 格式需為 #RRGGBB';
+  if (body.title !== undefined && typeof body.title === 'string' && body.title.length > 200) return 'title 過長（上限 200 字）';
+  if (body.description !== undefined && typeof body.description !== 'string') return 'description 需為字串';
+  if (body.time !== undefined && body.time !== '' && typeof body.time !== 'string') return 'time 需為字串';
+  if (body.companions !== undefined && typeof body.companions !== 'string') return 'companions 需為字串';
+  if (body.is_important !== undefined && typeof body.is_important !== 'boolean') return 'is_important 需為布林值';
+  return null;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -279,15 +317,60 @@ async function startServer() {
   // 密碼只存在後端環境變數,不會進到前端 bundle。
   // 前端每個 /api 請求都需帶 x-family-key 標頭,由下方閘門統一驗證。
   const FAMILY_ACCESS_KEY = process.env.FAMILY_ACCESS_KEY || "";
+
+  // 通行碼速率限制：金鑰較短，加上錯誤次數限制以防暴力破解。只計「錯誤」嘗試，
+  // 避免合法使用者頻繁輪詢時被誤鎖。以記憶體記錄，重啟/冷啟動會重置（家用規模足夠）。
+  const familyKeyFailures = new Map<string, { count: number; firstFailAt: number }>();
+  const FAMILY_KEY_MAX_FAILURES = 10;
+  const FAMILY_KEY_WINDOW_MS = 15 * 60 * 1000; // 15 分鐘
+
+  function getClientIp(req: any): string {
+    const fwd = req.headers["x-forwarded-for"];
+    if (typeof fwd === "string" && fwd.length > 0) return fwd.split(",")[0].trim();
+    return req.socket?.remoteAddress || "unknown";
+  }
+
+  function isFamilyKeyRateLimited(ip: string): boolean {
+    const rec = familyKeyFailures.get(ip);
+    if (!rec) return false;
+    if (Date.now() - rec.firstFailAt > FAMILY_KEY_WINDOW_MS) {
+      familyKeyFailures.delete(ip);
+      return false;
+    }
+    return rec.count >= FAMILY_KEY_MAX_FAILURES;
+  }
+
+  function recordFamilyKeyFailure(ip: string) {
+    const now = Date.now();
+    // 順手清掉過期紀錄，避免 Map 隨陌生 IP（如掃描器）無限成長。
+    if (familyKeyFailures.size > 500) {
+      for (const [key, rec] of familyKeyFailures) {
+        if (now - rec.firstFailAt > FAMILY_KEY_WINDOW_MS) familyKeyFailures.delete(key);
+      }
+    }
+    const rec = familyKeyFailures.get(ip);
+    if (!rec || now - rec.firstFailAt > FAMILY_KEY_WINDOW_MS) {
+      familyKeyFailures.set(ip, { count: 1, firstFailAt: now });
+    } else {
+      rec.count += 1;
+    }
+  }
+
   function requireFamilyKey(req: any, res: any, next: any) {
     if (!FAMILY_ACCESS_KEY) {
       // 沒設密碼時「故障即關閉」(fail closed),避免不小心又變回全開放。
       return res.status(503).json({ error: "伺服器尚未設定 FAMILY_ACCESS_KEY 環境變數,API 已封鎖以保護資料。" });
     }
+    const ip = getClientIp(req);
+    if (isFamilyKeyRateLimited(ip)) {
+      return res.status(429).json({ error: "嘗試次數過多，請 15 分鐘後再試。" });
+    }
     const provided = req.headers["x-family-key"] || "";
     if (provided !== FAMILY_ACCESS_KEY) {
+      recordFamilyKeyFailure(ip);
       return res.status(401).json({ error: "未授權:請輸入正確的家庭通行碼。" });
     }
+    familyKeyFailures.delete(ip);
     next();
   }
 
@@ -490,6 +573,12 @@ async function startServer() {
   // API: Create Event
   app.post("/api/events", async (req, res) => {
     try {
+      if (req.body.start_date !== undefined) req.body.start_date = normalizeEventDate(req.body.start_date);
+      if (req.body.end_date !== undefined) req.body.end_date = normalizeEventDate(req.body.end_date);
+
+      const validationError = validateEventFields(req.body, true);
+      if (validationError) return res.status(400).json({ error: validationError });
+
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
       const id = uuidv4();
@@ -509,6 +598,12 @@ async function startServer() {
   // API: Update Event
   app.put("/api/events/:id", async (req, res) => {
     try {
+      if (req.body.start_date !== undefined) req.body.start_date = normalizeEventDate(req.body.start_date);
+      if (req.body.end_date !== undefined) req.body.end_date = normalizeEventDate(req.body.end_date);
+
+      const validationError = validateEventFields(req.body, false);
+      if (validationError) return res.status(400).json({ error: validationError });
+
       const { id } = req.params;
       const database = getDb();
       if (!database) throw new Error("DB not initialized");
@@ -556,7 +651,7 @@ async function startServer() {
       const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
       const todaysEvents = events.filter((e: any) => e.start_date === todayStr || (e.start_date <= todayStr && e.end_date >= todayStr));
 
-      const [weather, holiday] = await Promise.all([getTodayWeather(24.1800, 120.6970, "台中市北屯區"), getTodayHoliday(parseInt(yyyy), todayStr)]);
+      const [weather, holiday] = await Promise.all([getTodayWeather(), getTodayHoliday(parseInt(yyyy), todayStr)]);
       // if (todaysEvents.length === 0 && !holiday) return res.json({ success: true, message: "No events" });
 
       let msg = `📅 【今日家庭行事曆】 ${todayStr}\n`;
@@ -820,7 +915,7 @@ async function startServer() {
 
       // 指令 3: 天氣狀況
       if (text === '天氣' || text === '現在天氣' || text === '今日天氣') {
-        const weather = await getTodayWeather(24.1800, 120.6970, "台中市北屯區");
+        const weather = await getTodayWeather();
         const holiday = await getTodayHoliday(new Date().getFullYear(), new Date().toISOString().split('T')[0]);
         let msg = `⛅ 目前氣象狀況：\n${weather || '暫時無法取得天氣資訊'}`;
         if (holiday) msg += `\n\n🏮 今日節慶：${holiday}`;
@@ -940,26 +1035,9 @@ async function startServer() {
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
-  // --- Internal Cron Setup ---
-  // Note: These will only run while the container/server is awake. In Serverless environments,
-  // containers may sleep after inactivity.
-  cron.schedule('0 7 * * *', async () => {
-    console.log("⏰ Running internal daily push cron...");
-    try {
-      await axios.get(`http://localhost:${PORT}/api/cron/daily-push`, {
-        headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
-      });
-    } catch(e: any) { console.error("Cron daily push failed:", e.message); }
-  }, { timezone: 'Asia/Taipei' });
-
-  cron.schedule('*/5 * * * *', async () => {
-    console.log("⏰ Running internal hourly reminder cron...");
-    try {
-      await axios.get(`http://localhost:${PORT}/api/cron/hourly-reminder`, {
-        headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
-      });
-    } catch(e: any) { console.error("Cron hourly reminder failed:", e.message); }
-  });
+  // Cron 排程改由 .github/workflows 的 GitHub Actions 準點呼叫 /api/cron/daily-push 與
+  // /api/cron/hourly-reminder（帶 CRON_SECRET）。Vercel serverless 容器不會常駐，
+  // 原本掛在這裡的 in-process node-cron 幾乎不會準時觸發，故不再使用。
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
