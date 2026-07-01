@@ -17,10 +17,9 @@ import {
   startOfDay
 } from 'date-fns';
 import { 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronDown,
-  Plus, 
+  ChevronLeft,
+  ChevronRight,
+  Plus,
   Calendar as CalendarIcon, 
   User, 
   Clock,
@@ -216,8 +215,6 @@ export default function App() {
   const [editingEventId, setEditingEventId] = useState<string | number | null>(null);
   const [isQuickLeaveEnabled, setIsQuickLeaveEnabled] = useState(false);
   const [isQuickWorkEnabled, setIsQuickWorkEnabled] = useState(false);
-  const [isQuickAddMenuOpen, setIsQuickAddMenuOpen] = useState(false);
-  const quickAddMenuRef = useRef<HTMLDivElement>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<string>('載入中...');
@@ -377,18 +374,6 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
-
-  // 「一鍵新增」下拉選單：點外面自動收合
-  useEffect(() => {
-    if (!isQuickAddMenuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (quickAddMenuRef.current && !quickAddMenuRef.current.contains(e.target as Node)) {
-        setIsQuickAddMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isQuickAddMenuOpen]);
 
   useEffect(() => {
     if (isElderlyMode) {
@@ -1797,56 +1782,35 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-              {/* 一鍵新增（排休/上班）下拉選單 */}
-              <div className="relative flex-shrink-0" ref={quickAddMenuRef}>
-                <button
-                  onClick={() => setIsQuickAddMenuOpen(!isQuickAddMenuOpen)}
+              {/* 一鍵新增（排休/上班）下拉選單：用原生 select，跟旁邊的成員篩選一致，
+                  避免自製浮動選單被外層「篩選成員」列的 overflow-x-auto 連帶裁掉 y 軸而看不見 */}
+              <div className="relative flex-shrink-0">
+                <select
+                  value={isQuickLeaveEnabled ? 'leave' : isQuickWorkEnabled ? 'work' : 'none'}
+                  onChange={(e) => {
+                    const mode = e.target.value;
+                    setIsQuickLeaveEnabled(mode === 'leave');
+                    setIsQuickWorkEnabled(mode === 'work');
+                  }}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
+                    "appearance-none pl-4 pr-9 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border outline-none cursor-pointer",
                     isQuickLeaveEnabled
                       ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
                       : isQuickWorkEnabled
                       ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 shadow-sm"
                       : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                   )}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '10px',
+                  }}
                 >
-                  <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
-                  {isQuickLeaveEnabled ? '一鍵排休' : isQuickWorkEnabled ? '一鍵上班' : '一鍵新增'}
-                  <ChevronDown size={12} className={cn("transition-transform", isQuickAddMenuOpen && "rotate-180")} />
-                </button>
-
-                {isQuickAddMenuOpen && (
-                  <div className="absolute top-full left-0 mt-1.5 w-36 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl shadow-lg z-30 overflow-hidden">
-                    <button
-                      onClick={() => {
-                        setIsQuickLeaveEnabled(!isQuickLeaveEnabled);
-                        setIsQuickWorkEnabled(false);
-                        setIsQuickAddMenuOpen(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-colors text-left",
-                        isQuickLeaveEnabled ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" : "text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700"
-                      )}
-                    >
-                      <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
-                      一鍵排休
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsQuickWorkEnabled(!isQuickWorkEnabled);
-                        setIsQuickLeaveEnabled(false);
-                        setIsQuickAddMenuOpen(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-colors text-left border-t border-stone-100 dark:border-stone-700",
-                        isQuickWorkEnabled ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400" : "text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700"
-                      )}
-                    >
-                      <Zap size={12} className={isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
-                      一鍵上班
-                    </button>
-                  </div>
-                )}
+                  <option value="none">⚡ 一鍵新增</option>
+                  <option value="leave">一鍵排休</option>
+                  <option value="work">一鍵上班</option>
+                </select>
               </div>
 
               <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
