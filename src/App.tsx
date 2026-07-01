@@ -216,6 +216,8 @@ export default function App() {
   const [editingEventId, setEditingEventId] = useState<string | number | null>(null);
   const [isQuickLeaveEnabled, setIsQuickLeaveEnabled] = useState(false);
   const [isQuickWorkEnabled, setIsQuickWorkEnabled] = useState(false);
+  const [isQuickAddMenuOpen, setIsQuickAddMenuOpen] = useState(false);
+  const quickAddMenuRef = useRef<HTMLDivElement>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<string>('載入中...');
@@ -375,6 +377,18 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  // 「一鍵新增」下拉選單：點外面自動收合
+  useEffect(() => {
+    if (!isQuickAddMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (quickAddMenuRef.current && !quickAddMenuRef.current.contains(e.target as Node)) {
+        setIsQuickAddMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isQuickAddMenuOpen]);
 
   useEffect(() => {
     if (isElderlyMode) {
@@ -1783,39 +1797,57 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-              {/* 一鍵排休開關 */}
-              <button
-                onClick={() => {
-                  setIsQuickLeaveEnabled(!isQuickLeaveEnabled);
-                  if (!isQuickLeaveEnabled) setIsQuickWorkEnabled(false);
-                }}
-                className={cn(
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
-                  isQuickLeaveEnabled 
-                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
-                    : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
-                )}
-              >
-                <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
-                一鍵排休
-              </button>
+              {/* 一鍵新增（排休/上班）下拉選單 */}
+              <div className="relative flex-shrink-0" ref={quickAddMenuRef}>
+                <button
+                  onClick={() => setIsQuickAddMenuOpen(!isQuickAddMenuOpen)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
+                    isQuickLeaveEnabled
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
+                      : isQuickWorkEnabled
+                      ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 shadow-sm"
+                      : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+                  )}
+                >
+                  <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
+                  {isQuickLeaveEnabled ? '一鍵排休' : isQuickWorkEnabled ? '一鍵上班' : '一鍵新增'}
+                  <ChevronDown size={12} className={cn("transition-transform", isQuickAddMenuOpen && "rotate-180")} />
+                </button>
 
-              {/* 一鍵上班開關 */}
-              <button
-                onClick={() => {
-                  setIsQuickWorkEnabled(!isQuickWorkEnabled);
-                  if (!isQuickWorkEnabled) setIsQuickLeaveEnabled(false);
-                }}
-                className={cn(
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border",
-                  isQuickWorkEnabled 
-                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 shadow-sm"
-                    : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+                {isQuickAddMenuOpen && (
+                  <div className="absolute top-full left-0 mt-1.5 w-36 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl shadow-lg z-30 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        setIsQuickLeaveEnabled(!isQuickLeaveEnabled);
+                        setIsQuickWorkEnabled(false);
+                        setIsQuickAddMenuOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-colors text-left",
+                        isQuickLeaveEnabled ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" : "text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700"
+                      )}
+                    >
+                      <Zap size={12} className={isQuickLeaveEnabled ? "text-amber-500" : "text-stone-400"} />
+                      一鍵排休
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsQuickWorkEnabled(!isQuickWorkEnabled);
+                        setIsQuickLeaveEnabled(false);
+                        setIsQuickAddMenuOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-colors text-left border-t border-stone-100 dark:border-stone-700",
+                        isQuickWorkEnabled ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400" : "text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700"
+                      )}
+                    >
+                      <Zap size={12} className={isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
+                      一鍵上班
+                    </button>
+                  </div>
                 )}
-              >
-                <Zap size={12} className={isQuickWorkEnabled ? "text-orange-500" : "text-stone-400"} />
-                一鍵上班
-              </button>
+              </div>
 
               <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
 
