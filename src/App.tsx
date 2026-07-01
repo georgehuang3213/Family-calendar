@@ -1429,20 +1429,20 @@ export default function App() {
       isDarkMode && "dark"
     )}>
       {/* Header - Simplified for Mobile */}
-      <header className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+      <header className="bg-[#8A3A24] dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200 flex-shrink-0">
             <CalendarIcon size={16} className="md:hidden" />
             <CalendarIcon size={24} className="hidden md:block" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-sm md:text-xl font-black tracking-tight truncate">家庭行事曆</h1>
+            <h1 className="text-sm md:text-xl font-black tracking-tight truncate text-[#FDEDD3] dark:text-stone-100">家庭行事曆</h1>
             <div className="flex items-center gap-1">
               <div className={cn(
                 "w-1 h-1 rounded-full",
                 storageSource === 'local' ? "bg-amber-500" : "bg-emerald-500"
               )} />
-              <span className="text-[9px] font-bold text-stone-400 uppercase tracking-tighter">
+              <span className="text-[9px] font-bold text-orange-200 dark:text-stone-400 uppercase tracking-tighter">
                 {storageSource === 'local' ? '本地' : '雲端'}
               </span>
             </div>
