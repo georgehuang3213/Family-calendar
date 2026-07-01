@@ -2327,7 +2327,7 @@ export default function App() {
                                 zIndex: isMultiDay ? 10 : 1,
                               }}
                               className={cn(
-                                "py-0.5 text-[11px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[22px]",
+                                "py-0.5 text-[13px] font-bold truncate hover:brightness-95 transition-all flex items-center gap-1 cursor-grab active:cursor-grabbing h-[22px]",
                                 isLeave && "ring-1 ring-inset ring-white/20",
                                 (event as any).syncing && "opacity-50 animate-pulse"
                               )}
