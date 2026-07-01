@@ -226,6 +226,25 @@ function validateEventFields(body: any, isCreate: boolean): string | null {
   return null;
 }
 
+// 「一鍵新增」快速項目（如排休/上班），存在 system_config/quick_add_presets 讓全家共用。
+const DEFAULT_QUICK_ADD_PRESETS = [
+  { id: 'leave', title: '排休' },
+  { id: 'work', title: '上班' },
+];
+
+function validateQuickAddPresets(presets: any): string | null {
+  if (!Array.isArray(presets)) return 'presets 需為陣列';
+  if (presets.length > 20) return 'presets 最多 20 筆';
+  const seenIds = new Set<string>();
+  for (const p of presets) {
+    if (typeof p?.id !== 'string' || !p.id.trim() || p.id.length > 100) return '每個項目需要 1~100 字的 id';
+    if (seenIds.has(p.id)) return `id 重複：${p.id}`;
+    seenIds.add(p.id);
+    if (typeof p?.title !== 'string' || !p.title.trim() || p.title.length > 20) return '每個項目需要 1~20 字的 title';
+  }
+  return null;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -526,6 +545,37 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error("❌ POST /api/config/weather Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Get「一鍵新增」快速項目清單（全家共用，沒設定過時回傳預設的排休/上班）
+  app.get("/api/config/quick-add-presets", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      const doc = await database.collection('system_config').doc('quick_add_presets').get();
+      const saved = doc.exists ? doc.data()?.presets : null;
+      const presets = Array.isArray(saved) && saved.length > 0 ? saved : DEFAULT_QUICK_ADD_PRESETS;
+      res.json({ presets });
+    } catch (error: any) {
+      console.error("❌ GET /api/config/quick-add-presets Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Save「一鍵新增」快速項目清單
+  app.post("/api/config/quick-add-presets", async (req, res) => {
+    try {
+      const validationError = validateQuickAddPresets(req.body.presets);
+      if (validationError) return res.status(400).json({ error: validationError });
+
+      const database = getDb();
+      if (!database) throw new Error("DB not initialized");
+      await database.collection('system_config').doc('quick_add_presets').set({ presets: req.body.presets }, { merge: true });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ POST /api/config/quick-add-presets Error:", error);
       res.status(500).json({ error: error.message });
     }
   });

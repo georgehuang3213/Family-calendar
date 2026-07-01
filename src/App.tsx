@@ -53,7 +53,8 @@ import {
   MapPin,
   Megaphone,
   Sparkles,
-  Send
+  Send,
+  Settings
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -213,8 +214,15 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDay, setSelectedDay] = useState<Date>(new Date());
   const [editingEventId, setEditingEventId] = useState<string | number | null>(null);
-  const [isQuickLeaveEnabled, setIsQuickLeaveEnabled] = useState(false);
-  const [isQuickWorkEnabled, setIsQuickWorkEnabled] = useState(false);
+  // 「一鍵新增」快速項目：預設排休/上班，可在管理面板新增/刪除，存在後端讓全家共用
+  const [quickAddPresets, setQuickAddPresets] = useState<{ id: string, title: string }[]>([
+    { id: 'leave', title: '排休' },
+    { id: 'work', title: '上班' },
+  ]);
+  const [activeQuickAddId, setActiveQuickAddId] = useState<string | null>(null);
+  const [isManagePresetsOpen, setIsManagePresetsOpen] = useState(false);
+  const [newPresetTitle, setNewPresetTitle] = useState('');
+  const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<string>('載入中...');
@@ -224,9 +232,8 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error', action?: { label: string, onClick: () => void }, duration?: number } | null>(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
-  const [quickSelectType, setQuickSelectType] = useState<'leave' | 'work'>('leave');
-  const pendingQuickLeaves = useRef<Set<string>>(new Set());
-  const pendingQuickWorks = useRef<Set<string>>(new Set());
+  const [quickSelectPresetId, setQuickSelectPresetId] = useState<string | null>(null);
+  const pendingQuickAdds = useRef<Set<string>>(new Set());
   const [isElderlyMode, setIsElderlyMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('elderlyMode') === 'true';
@@ -446,30 +453,32 @@ export default function App() {
     setToast({ message, type, action, duration });
   };
 
-  const handleQuickLeave = async (member: string) => {
+  // 「一鍵新增」通用處理：取代原本各自獨立的 handleQuickLeave/handleQuickWork，
+  // 讓管理面板新增的任何自訂項目（不只排休/上班）都能走同一套邏輯。
+  const handleQuickAdd = async (member: string, preset: { id: string, title: string }) => {
     const dateStr = format(selectedDay, 'yyyy-MM-dd');
-    const lockKey = `${member}-${dateStr}`;
-    
+    const lockKey = `${preset.id}-${member}-${dateStr}`;
+
     // 1. 防止重複點擊 (鎖定)
-    if (pendingQuickLeaves.current.has(lockKey)) return;
-    
-    // 2. 檢查是否已經有該成員在該天的排休
-    const alreadyHasLeave = events.some(e => 
-      e.member_name === member && 
-      e.start_date === dateStr && 
-      (e.title.includes('排休') || e.title.includes('休假'))
+    if (pendingQuickAdds.current.has(lockKey)) return;
+
+    // 2. 檢查是否已經有該成員在該天的同一項目
+    const alreadyExists = events.some(e =>
+      e.member_name === member &&
+      e.start_date === dateStr &&
+      e.title === preset.title
     );
-    
-    if (alreadyHasLeave) {
-      showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有排休了`, 'error');
+
+    if (alreadyExists) {
+      showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有${preset.title}了`, 'error');
       return;
     }
 
-    pendingQuickLeaves.current.add(lockKey);
-    
+    pendingQuickAdds.current.add(lockKey);
+
     const eventColor = MEMBER_COLORS[member] || '#4F46E5';
-    const leaveEvent = {
-      title: '排休',
+    const quickEvent = {
+      title: preset.title,
       description: '',
       start_date: dateStr,
       end_date: dateStr,
@@ -480,13 +489,13 @@ export default function App() {
       action: 'create',
     };
 
-    const tempId = `temp-${Date.now()}`;
-    const optimisticEvent = { ...leaveEvent, id: tempId, syncing: true };
-    
+    const tempId = `temp-${preset.id}-${Date.now()}`;
+    const optimisticEvent = { ...quickEvent, id: tempId, syncing: true };
+
     setEvents(prev => [...prev, optimisticEvent]);
-    showToast(`正在新增 ${member} 排休...`);
+    showToast(`正在新增 ${member} ${preset.title}...`);
     setIsDayModalOpen(false);
-    
+
     if (filterMember !== '全部' && filterMember !== member) {
       setFilterMember(member);
     }
@@ -495,9 +504,9 @@ export default function App() {
       const res = await apiFetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(leaveEvent)
+        body: JSON.stringify(quickEvent)
       });
-      
+
       const contentType = res.headers.get("content-type");
       let result;
       if (contentType && contentType.includes("application/json")) {
@@ -509,101 +518,64 @@ export default function App() {
       }
 
       if (!res.ok) throw new Error(result.error || `操作失敗 (${res.status})`);
-      
-      showToast(`已成功新增 ${member} 排休`);
-      
+
+      // Update sticky lock，避免下一次輪詢把剛設定的 is_important 蓋回去
+      const lockData = { is_important: false, timestamp: Date.now() };
+      const signature = `${quickEvent.title}|${quickEvent.start_date}|${quickEvent.member_name}`.toLowerCase().trim();
+      importanceLocker.current.set(signature, lockData);
+
+      showToast(`已成功新增 ${member} ${preset.title}`);
+
       if (result.id) {
         setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
       }
     } catch (err: any) {
-      console.error("Quick Leave Error:", err);
+      console.error("Quick Add Error:", err);
       showToast(`新增失敗: ${err.message}`, 'error');
       setEvents(prev => prev.filter(e => String(e.id) !== tempId));
     } finally {
-      pendingQuickLeaves.current.delete(lockKey);
+      pendingQuickAdds.current.delete(lockKey);
     }
   };
 
-  const handleQuickWork = async (member: string) => {
-    const dateStr = format(selectedDay, 'yyyy-MM-dd');
-    const lockKey = `${member}-${dateStr}`;
-    
-    // 1. 防止重複點擊 (鎖定)
-    if (pendingQuickWorks.current.has(lockKey)) return;
-    
-    // 2. 檢查是否已經有該成員在該天的上班紀錄
-    const alreadyHasWork = events.some(e => 
-      e.member_name === member && 
-      e.start_date === dateStr && 
-      e.title === '上班'
-    );
-    
-    if (alreadyHasWork) {
-      showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有上班紀錄了`, 'error');
+  // 「一鍵新增」管理面板：本地先編輯，按「儲存」才送到後端讓全家同步
+  const addPreset = () => {
+    const title = newPresetTitle.trim();
+    if (!title) return;
+    if (quickAddPresets.some(p => p.title === title)) {
+      showToast('已經有相同名稱的選項了', 'error');
       return;
     }
+    setQuickAddPresets(prev => [...prev, { id: `custom-${Date.now()}`, title }]);
+    setNewPresetTitle('');
+  };
 
-    pendingQuickWorks.current.add(lockKey);
-    
-    const eventColor = MEMBER_COLORS[member] || '#4F46E5';
-    const workEvent = {
-      title: '上班',
-      description: '',
-      start_date: dateStr,
-      end_date: dateStr,
-      time: '',
-      member_name: member,
-      color: eventColor,
-      is_important: false,
-      action: 'create',
-    };
+  const removePreset = (id: string) => {
+    setQuickAddPresets(prev => prev.filter(p => p.id !== id));
+    if (activeQuickAddId === id) setActiveQuickAddId(null);
+  };
 
-    const tempId = `temp-work-${Date.now()}`;
-    const optimisticEvent = { ...workEvent, id: tempId, syncing: true };
-    
-    setEvents(prev => [...prev, optimisticEvent]);
-    showToast(`正在新增 ${member} 上班...`);
-    setIsDayModalOpen(false);
-    
-    if (filterMember !== '全部' && filterMember !== member) {
-      setFilterMember(member);
+  const savePresets = async () => {
+    if (quickAddPresets.length === 0) {
+      showToast('至少要保留一個選項', 'error');
+      return;
     }
-
+    setIsSavingPresets(true);
     try {
-      const res = await apiFetch('/api/events', {
+      const res = await apiFetch('/api/config/quick-add-presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(workEvent)
+        body: JSON.stringify({ presets: quickAddPresets })
       });
-      
-      const contentType = res.headers.get("content-type");
-      let result;
-      if (contentType && contentType.includes("application/json")) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        console.error("Non-JSON response from server:", text);
-        throw new Error(`伺服器回應異常 (非 JSON): ${text.substring(0, 50)}...`);
-      }
-
-      if (!res.ok) throw new Error(result.error || `操作失敗 (${res.status})`);
-      
-      // Update sticky lock
-      const lockData = { is_important: false, timestamp: Date.now() };
-      const signature = `${workEvent.title}|${workEvent.start_date}|${workEvent.member_name}`.toLowerCase().trim();
-      importanceLocker.current.set(signature, lockData);
-      
-      showToast(`已成功新增 ${member} 上班`);
-      
-      if (result.id) {
-        setEvents(prev => prev.map(e => String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e));
-      }
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || `儲存失敗 (${res.status})`);
+      showToast('已儲存一鍵新增選項');
+      setIsManagePresetsOpen(false);
     } catch (err: any) {
-      console.error("Quick Work Error:", err);
-      showToast(`新增失敗: ${err.message}`, 'error');
-      setEvents(prev => prev.filter(e => String(e.id) !== tempId));
+      console.error("Save Quick-Add Presets Error:", err);
+      showToast(`儲存失敗: ${err.message}`, 'error');
     } finally {
-      pendingQuickWorks.current.delete(lockKey);
+      setIsSavingPresets(false);
     }
   };
 
@@ -664,6 +636,13 @@ export default function App() {
 
     fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
+
+    apiFetch('/api/config/quick-add-presets')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data.presets) && data.presets.length > 0) setQuickAddPresets(data.presets);
+      })
+      .catch(e => console.error('載入一鍵新增選項失敗:', e));
 
     // 2. 透過後端 API 載入行程並套用「重要」樂觀鎖
     const processDatabaseEvents = (dbEvents: Event[]) => {
@@ -1782,22 +1761,17 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-              {/* 一鍵新增（排休/上班）下拉選單：用原生 select，跟旁邊的成員篩選一致，
-                  避免自製浮動選單被外層「篩選成員」列的 overflow-x-auto 連帶裁掉 y 軸而看不見 */}
+              {/* 一鍵新增下拉選單：用原生 select，跟旁邊的成員篩選一致，
+                  避免自製浮動選單被外層「篩選成員」列的 overflow-x-auto 連帶裁掉 y 軸而看不見。
+                  選項清單來自 quickAddPresets（預設排休/上班，可在「管理活動」新增/刪除）。 */}
               <div className="relative flex-shrink-0">
                 <select
-                  value={isQuickLeaveEnabled ? 'leave' : isQuickWorkEnabled ? 'work' : 'none'}
-                  onChange={(e) => {
-                    const mode = e.target.value;
-                    setIsQuickLeaveEnabled(mode === 'leave');
-                    setIsQuickWorkEnabled(mode === 'work');
-                  }}
+                  value={activeQuickAddId || 'none'}
+                  onChange={(e) => setActiveQuickAddId(e.target.value === 'none' ? null : e.target.value)}
                   className={cn(
-                    "appearance-none pl-4 pr-9 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border outline-none cursor-pointer",
-                    isQuickLeaveEnabled
+                    "appearance-none pl-4 pr-9 py-1.5 rounded-full text-[13px] font-black uppercase tracking-widest transition-all border outline-none cursor-pointer",
+                    activeQuickAddId
                       ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm"
-                      : isQuickWorkEnabled
-                      ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 shadow-sm"
                       : "bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
                   )}
                   style={{
@@ -1808,10 +1782,20 @@ export default function App() {
                   }}
                 >
                   <option value="none">⚡ 一鍵新增</option>
-                  <option value="leave">一鍵排休</option>
-                  <option value="work">一鍵上班</option>
+                  {quickAddPresets.map(preset => (
+                    <option key={preset.id} value={preset.id}>{preset.title}</option>
+                  ))}
                 </select>
               </div>
+
+              <button
+                onClick={() => setIsManagePresetsOpen(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-black uppercase tracking-widest transition-all border bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
+                title="管理一鍵新增選項"
+              >
+                <Settings size={13} />
+                管理活動
+              </button>
 
               <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
 
@@ -2192,22 +2176,14 @@ export default function App() {
                     key={day.toString()} 
                     onClick={() => {
                       setSelectedDay(day);
-                      if (isQuickLeaveEnabled) {
+                      const activePreset = activeQuickAddId ? quickAddPresets.find(p => p.id === activeQuickAddId) : null;
+                      if (activePreset) {
                         if (filterMember !== '全部') {
-                          // 如果已選擇特定成員，直接排休
-                          handleQuickLeave(filterMember);
+                          // 如果已選擇特定成員，直接新增
+                          handleQuickAdd(filterMember, activePreset);
                         } else {
                           // 如果是全部成員，開啟快速選擇視窗
-                          setQuickSelectType('leave');
-                          setIsQuickSelectOpen(true);
-                        }
-                      } else if (isQuickWorkEnabled) {
-                        if (filterMember !== '全部') {
-                          // 如果已選擇特定成員，直接上班
-                          handleQuickWork(filterMember);
-                        } else {
-                          // 如果是全部成員，開啟快速選擇視窗
-                          setQuickSelectType('work');
+                          setQuickSelectPresetId(activePreset.id);
                           setIsQuickSelectOpen(true);
                         }
                       } else {
@@ -2400,54 +2376,131 @@ export default function App() {
           </div>
         )}
 
-        {/* Quick Select Modal for Quick Leave/Work */}
-        {isQuickSelectOpen && (
-          <div 
+        {/* Quick Select Modal for 一鍵新增 */}
+        {isQuickSelectOpen && (() => {
+          const preset = quickAddPresets.find(p => p.id === quickSelectPresetId);
+          if (!preset) return null;
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4"
+              onClick={() => setIsQuickSelectOpen(false)}
+            >
+              <div
+                className="bg-white dark:bg-stone-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200 border border-stone-100 dark:border-stone-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap size={18} className="text-amber-500" />
+                    <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest">
+                      快速{preset.title} ({format(selectedDay, 'MM/dd')})
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setIsQuickSelectOpen(false)}
+                    className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="p-5">
+                  <p className="text-[11px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">
+                    選擇要{preset.title}的成員：
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FAMILY_MEMBERS.map(member => (
+                      <button
+                        key={member}
+                        onClick={() => {
+                          handleQuickAdd(member, preset);
+                          setIsQuickSelectOpen(false);
+                        }}
+                        className="px-4 py-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98]"
+                        style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
+                      >
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
+                        {member}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 管理「一鍵新增」選項 */}
+        {isManagePresetsOpen && (
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4"
-            onClick={() => setIsQuickSelectOpen(false)}
+            onClick={() => setIsManagePresetsOpen(false)}
           >
-            <div 
+            <div
               className="bg-white dark:bg-stone-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200 border border-stone-100 dark:border-stone-800"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Zap size={18} className={quickSelectType === 'leave' ? "text-amber-500" : "text-orange-500"} />
+                  <Settings size={18} className="text-orange-600" />
                   <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest">
-                    快速{quickSelectType === 'leave' ? '排休' : '上班'} ({format(selectedDay, 'MM/dd')})
+                    管理一鍵新增選項
                   </h3>
                 </div>
-                <button 
-                  onClick={() => setIsQuickSelectOpen(false)}
+                <button
+                  onClick={() => setIsManagePresetsOpen(false)}
                   className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
                 >
                   <X size={20} />
                 </button>
               </div>
+
               <div className="p-5">
-                <p className="text-[11px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-4">
-                  選擇要{quickSelectType === 'leave' ? '排休' : '上班'}的成員：
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {FAMILY_MEMBERS.map(member => (
-                    <button
-                      key={member}
-                      onClick={() => {
-                        if (quickSelectType === 'leave') {
-                          handleQuickLeave(member);
-                        } else {
-                          handleQuickWork(member);
-                        }
-                        setIsQuickSelectOpen(false);
-                      }}
-                      className="px-4 py-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98]"
-                      style={{ borderColor: MEMBER_COLORS[member] || '#4F46E5', color: MEMBER_COLORS[member] || '#4F46E5' }}
+                <div className="flex flex-col gap-2 mb-4 max-h-60 overflow-y-auto">
+                  {quickAddPresets.map(preset => (
+                    <div
+                      key={preset.id}
+                      className="flex items-center justify-between px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700"
                     >
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }} />
-                      {member}
-                    </button>
+                      <span className="font-bold text-sm text-stone-700 dark:text-stone-200">{preset.title}</span>
+                      <button
+                        onClick={() => removePreset(preset.id)}
+                        className="text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                        title="刪除"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   ))}
+                  {quickAddPresets.length === 0 && (
+                    <p className="text-xs text-stone-400 text-center py-6">目前沒有任何選項，至少要新增一個</p>
+                  )}
                 </div>
+
+                <div className="flex gap-2 mb-4">
+                  <input
+                    value={newPresetTitle}
+                    onChange={(e) => setNewPresetTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPreset(); } }}
+                    placeholder="例如：加班"
+                    maxLength={20}
+                    className="flex-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl px-3.5 py-2.5 text-sm font-medium text-stone-900 dark:text-stone-100 outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <button
+                    onClick={addPreset}
+                    disabled={!newPresetTitle.trim()}
+                    className="px-4 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-sm hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    新增
+                  </button>
+                </div>
+
+                <button
+                  onClick={savePresets}
+                  disabled={isSavingPresets}
+                  className="w-full bg-orange-600 text-white rounded-xl py-2.5 font-bold text-sm hover:bg-orange-700 transition-colors disabled:opacity-50"
+                >
+                  {isSavingPresets ? '儲存中...' : '儲存'}
+                </button>
               </div>
             </div>
           </div>
