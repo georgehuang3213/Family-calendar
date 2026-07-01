@@ -694,13 +694,18 @@ async function startServer() {
       
       console.log(`📡 Checking for important reminders at ${targetDateStr} around ${targetTimeStr}`);
 
-      const snapshot = await database.collection('events').get();
+      // 這支端點現在每 5 分鐘跑一次，原本每次都把整個 events 集合搬出來再自己篩「今天」，
+      // 大部分讀取都白費。改成直接在 Firestore 查詢層篩「今天 + 重要」，只搬回真正用得到的那幾筆。
+      const snapshot = await database.collection('events')
+        .where('start_date', '==', targetDateStr)
+        .where('is_important', '==', true)
+        .get();
       const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
-      
-      // 篩選：標記為重要、日期正確、且時間在 1 小時後 (允許 +/- 5 分鐘誤差以配合 Cron 頻率)
+
+      // 篩選：時間在 1 小時後 (允許 +/- 5 分鐘誤差以配合 Cron 頻率)
       const reminders = events.filter((e: any) => {
-        if (!e.is_important || !e.time || e.start_date !== targetDateStr) return false;
-        
+        if (!e.time) return false;
+
         // 解析時間格式如 "14:30"，並支援區間格式 "14:30 - 16:00"（取開始時間）
         const startTimePart = String(e.time).split('-')[0].trim();
         const [h, m] = startTimePart.split(':').map(Number);
