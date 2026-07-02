@@ -1,12 +1,11 @@
 name: Family Calendar Cron
 
-# Vercel serverless 容器不會常駐，站內 node-cron 幾乎不會準時觸發；
-# Vercel Hobby 方案自帶的 crons 也會固定延遲約 19 分。改由這裡準點呼叫正式站的 cron 端點。
+# 定時排程已改由 cron-job.org 負責（GitHub Actions 免費版排程實測嚴重不準：
+# 每日推播晚 61 分鐘、每 5 分鐘排程實際 1.5~2.7 小時才跑一次，2026-07-02 量測）。
+# 這裡只保留手動觸發，供部署後測試 cron 端點用。
+# 注意：手動觸發會同時執行兩個 job，daily-push 會真的發一則 LINE 推播給家人。
 on:
-  schedule:
-    - cron: '0 23 * * *'   # 每日總結推播：07:00 台北時間（UTC+8）= 前一天 23:00 UTC
-    - cron: '*/5 * * * *'  # 重要行程「提前 1 小時」提醒；伺服器端比對容許 ±5 分鐘誤差，需配合此頻率才不會漏掉
-  workflow_dispatch: {}     # 手動觸發，方便測試
+  workflow_dispatch: {}
 
 env:
   APP_URL: https://family-calendar-bay-gamma.vercel.app

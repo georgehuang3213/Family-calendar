@@ -737,22 +737,28 @@ async function startServer() {
 
       const tz = "Asia/Taipei";
       const now = new Date();
-      // 我們要找「現在 + 1小時」的行程
-      const targetTime = new Date(now.getTime() + 60 * 60 * 1000);
-      const targetDateStr = new Date(targetTime.toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("zh-TW", { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-      const targetTimeStr = targetTime.toLocaleTimeString("zh-TW", { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' });
-      
-      console.log(`📡 Checking for important reminders at ${targetDateStr} around ${targetTimeStr}`);
 
-      // 這支端點現在每 5 分鐘跑一次，原本每次都把整個 events 集合搬出來再自己篩「今天」，
-      // 大部分讀取都白費。改成直接在 Firestore 查詢層篩「今天 + 重要」，只搬回真正用得到的那幾筆。
+      // 外部排程（cron-job.org）每 15 分鐘整點對齊觸發（:00/:15/:30/:45）。
+      // 把「現在」向下取到所屬的 15 分鐘槽，每次執行負責「槽 + 60 分鐘」起的整段 15 分鐘窗口，
+      // 一格接一格：不會漏掉任何時間點，也不會跨兩次執行重複提醒同一筆。
+      // 就算排程晚個幾十秒～幾分鐘才打進來，取槽的結果仍相同，不受抖動影響。
+      // （窗口起點固定對齊 :00/:15/:30/:45，永遠不會跨到隔天，單一日期查詢即可。）
+      const SLOT_MS = 15 * 60 * 1000;
+      const slotStart = Math.floor(now.getTime() / SLOT_MS) * SLOT_MS;
+      const windowStart = new Date(slotStart + 60 * 60 * 1000);
+      const targetDateStr = new Date(windowStart.toLocaleString("en-US", { timeZone: tz })).toLocaleDateString("zh-TW", { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      const windowStartStr = windowStart.toLocaleTimeString("zh-TW", { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' });
+
+      console.log(`📡 Checking for important reminders on ${targetDateStr} in window [${windowStartStr}, +15min)`);
+
+      // 直接在 Firestore 查詢層篩「目標日期 + 重要」，只搬回真正用得到的那幾筆。
       const snapshot = await database.collection('events')
         .where('start_date', '==', targetDateStr)
         .where('is_important', '==', true)
         .get();
       const events = snapshot.docs.map((doc: any) => ({ ...doc.data() }));
 
-      // 篩選：時間在 1 小時後 (允許 +/- 5 分鐘誤差以配合 Cron 頻率)
+      // 篩選：開始時間落在這次執行負責的 15 分鐘窗口內（約 1 小時後開始的行程）
       const reminders = events.filter((e: any) => {
         if (!e.time) return false;
 
@@ -760,13 +766,12 @@ async function startServer() {
         const startTimePart = String(e.time).split('-')[0].trim();
         const [h, m] = startTimePart.split(':').map(Number);
         if (isNaN(h) || isNaN(m)) return false; // 無法解析的時間就略過，避免 NaN 比對
-        const [th, tm] = targetTimeStr.split(':').map(Number);
-        
-        // 比對小時與分鐘 (在目標分鐘的前後 5 分鐘內)
+        const [wh, wm] = windowStartStr.split(':').map(Number);
+
         const eventTotalMins = h * 60 + m;
-        const targetTotalMins = th * 60 + tm;
-        
-        return Math.abs(eventTotalMins - targetTotalMins) <= 5;
+        const windowStartMins = wh * 60 + wm;
+
+        return eventTotalMins >= windowStartMins && eventTotalMins < windowStartMins + 15;
       });
 
       if (reminders.length === 0) {
@@ -774,7 +779,7 @@ async function startServer() {
       }
 
       for (const e of reminders) {
-        let msg = `🔔 【重要行程提醒】\n活動將在 1 小時後開始！\n\n📌 主旨：${e.title}\n🕒 時間：${e.time}\n👤 對象：${e.member_name}\n`;
+        let msg = `🔔 【重要行程提醒】\n活動將在約 1 小時後開始！\n\n📌 主旨：${e.title}\n🕒 時間：${e.time}\n👤 對象：${e.member_name}\n`;
         if (e.description) msg += `📝 備註：${e.description}`;
         await sendLineNotification(msg.trim());
       }
