@@ -1132,53 +1132,47 @@ export default function App() {
       )}
     >
       {/* Header */}
-      <header className="bg-[#8A3A24] dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-600 rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200 flex-shrink-0">
-            <CalendarIcon size={16} className="md:hidden" />
-            <CalendarIcon size={24} className="hidden md:block" />
+      <header className="bg-[#8A3A24] dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-3.5 md:px-6 h-14 md:h-[72px] flex items-center justify-between sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-orange-950/30 flex-shrink-0">
+            <CalendarIcon size={17} className="md:hidden" />
+            <CalendarIcon size={22} className="hidden md:block" />
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-sm md:text-xl font-black tracking-tight truncate text-[#FDEDD3] dark:text-stone-100">
-              家庭行事曆
-            </h1>
-            <div className="flex items-center gap-1">
-              <div
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base md:text-xl font-black tracking-tight truncate text-[#FDEDD3] dark:text-stone-100">
+                家庭行事曆
+              </h1>
+              <span
                 className={cn(
-                  'w-1 h-1 rounded-full',
-                  storageSource === 'local' ? 'bg-amber-500' : 'bg-emerald-500'
+                  'w-2 h-2 rounded-full shrink-0',
+                  storageSource === 'local' ? 'bg-amber-400' : 'bg-emerald-400'
                 )}
+                title={storageSource === 'local' ? '本地儲存' : '雲端同步'}
               />
-              <span className="text-[9px] font-bold text-orange-200 dark:text-stone-400 uppercase tracking-tighter">
-                {storageSource === 'local' ? '本地' : '雲端'}
-              </span>
             </div>
+            <span className="hidden md:inline text-[10px] font-bold text-orange-200/90 dark:text-stone-400 uppercase tracking-wider">
+              {storageSource === 'local' ? '本地模式' : '雲端同步'}
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 md:gap-4">
-          <button
-            onClick={() => fetchEvents(true)}
-            className="p-2 text-stone-500 hover:text-orange-600 dark:text-stone-400 dark:hover:text-orange-400 transition-colors bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg shadow-sm"
-            title="重新整理"
-          >
-            <Zap size={16} className={cn(loading && 'animate-pulse text-orange-500')} />
-          </button>
-
-          <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5 md:p-1">
+        <div className="flex items-center gap-1.5 md:gap-3">
+          {/* Desktop Month Switcher */}
+          <div className="hidden md:flex items-center bg-stone-100 dark:bg-stone-800 rounded-xl p-1">
             <button
               onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-              className="p-1 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-md transition-all"
+              className="p-1.5 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-lg transition-all"
               title="上個月"
             >
               <ChevronLeft size={18} />
             </button>
-            <span className="px-1.5 md:px-4 font-bold text-xs md:text-base min-w-[70px] md:min-w-[120px] text-center">
-              {format(currentDate, 'yyyy/MM')}
+            <span className="px-3 font-black text-sm min-w-[110px] text-center">
+              {format(currentDate, 'yyyy年 MM月')}
             </span>
             <button
               onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-              className="p-1 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-md transition-all"
+              className="p-1.5 hover:bg-white dark:hover:bg-stone-700 hover:shadow-sm rounded-lg transition-all"
               title="下個月"
             >
               <ChevronRight size={18} />
@@ -1191,7 +1185,7 @@ export default function App() {
               setCurrentDate(now);
               setSelectedDay(now);
             }}
-            className="flex items-center justify-center bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
+            className="hidden md:flex items-center justify-center bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-3 py-2 rounded-xl text-xs font-bold text-stone-700 dark:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
           >
             今天
           </button>
@@ -1199,49 +1193,78 @@ export default function App() {
           <button
             onClick={() => setIsElderlyMode(!isElderlyMode)}
             className={cn(
-              'flex items-center justify-center px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-bold transition-colors shadow-sm border',
+              'flex items-center justify-center px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl text-xs font-extrabold transition-colors shadow-sm border',
               isElderlyMode
-                ? 'bg-amber-500 text-white border-amber-600'
-                : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700'
+                ? 'bg-amber-500 text-white border-amber-400'
+                : 'bg-white/95 dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-white/20 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-700'
             )}
             title="長輩友善模式"
           >
-            長輩模式
+            {isElderlyMode ? '退出長輩' : '長輩模式'}
+          </button>
+
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-orange-100 hover:text-white dark:text-stone-300 dark:hover:text-white bg-white/10 hover:bg-white/20 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-xl transition-colors"
+            title={isDarkMode ? '切換為淺色模式' : '切換為深色模式'}
+          >
+            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
+          <button
+            onClick={() => fetchEvents(true)}
+            className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-orange-100 hover:text-white dark:text-stone-300 dark:hover:text-white bg-white/10 hover:bg-white/20 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-xl transition-colors"
+            title="重新整理"
+          >
+            <Zap size={16} className={cn(loading && 'animate-pulse text-amber-300')} />
+          </button>
+
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className={cn(
+              'w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl transition-colors',
+              showDebug
+                ? 'bg-orange-500 text-white'
+                : 'text-orange-100/80 hover:text-white dark:text-stone-400 dark:hover:text-white bg-white/10 hover:bg-white/20 dark:bg-stone-800 dark:hover:bg-stone-700'
+            )}
+            title="偵錯資訊"
+          >
+            <Info size={16} />
           </button>
 
           <button
             onClick={() => openCreateModal(new Date())}
-            className="hidden md:flex bg-orange-600 text-white px-4 py-2 rounded-lg font-bold items-center gap-2 hover:bg-orange-700 transition-colors shadow-sm"
+            className="hidden md:flex bg-orange-600 text-white px-4 py-2 rounded-xl font-bold items-center gap-1.5 hover:bg-orange-700 transition-colors shadow-sm text-sm"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             <span>新增活動</span>
           </button>
         </div>
       </header>
 
-      <main className="p-4 md:p-6 max-w-7xl mx-auto">
+      <main className="px-2.5 py-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
         {/* 置頂重要公告 */}
         {upcomingImportantEvents.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-3.5 md:mb-6">
             <div
               className={cn(
-                'bg-amber-50/50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/30 rounded-xl shadow-sm overflow-hidden',
+                'bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/70 dark:border-amber-800/40 rounded-2xl shadow-sm overflow-hidden',
                 isElderlyMode ? 'p-5 md:p-6' : 'p-3 md:p-4'
               )}
             >
-              <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="flex items-center justify-between mb-2.5 md:mb-3">
                 <div
                   className={cn(
-                    'flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-[0.2em] uppercase',
-                    isElderlyMode ? 'text-xl' : 'text-[11px] md:text-xs'
+                    'flex items-center gap-1.5 text-amber-800 dark:text-amber-400 font-black tracking-wider uppercase',
+                    isElderlyMode ? 'text-xl' : 'text-xs'
                   )}
                 >
-                  <Megaphone size={isElderlyMode ? 28 : 14} />
+                  <Megaphone size={isElderlyMode ? 26 : 14} />
                   <span>置頂重要公告</span>
                 </div>
                 <span
                   className={cn(
-                    'font-bold text-amber-600/60 dark:text-amber-500/40 bg-amber-100/50 dark:bg-amber-900/40 rounded-full',
+                    'font-bold text-amber-700 dark:text-amber-400 bg-amber-200/60 dark:bg-amber-900/50 rounded-full',
                     isElderlyMode ? 'px-4 py-1 text-lg' : 'px-2 py-0.5 text-[11px]'
                   )}
                 >
@@ -1250,32 +1273,33 @@ export default function App() {
               </div>
               <div
                 className={cn(
-                  'grid gap-3',
-                  isElderlyMode ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-                  upcomingImportantEvents.length > 4 && 'max-h-[320px] md:max-h-[500px] overflow-y-auto pr-1 custom-scrollbar'
+                  isElderlyMode
+                    ? 'grid grid-cols-1 gap-3'
+                    : 'flex sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 md:gap-3 overflow-x-auto sm:overflow-visible snap-x no-scrollbar pb-0.5'
                 )}
               >
                 {upcomingImportantEvents.map((evt) => (
                   <div
                     key={evt.id}
+                    onClick={() => handleEditClick(evt)}
                     className={cn(
-                      'flex flex-col bg-white/80 dark:bg-stone-800/80 backdrop-blur-sm rounded-xl border border-amber-100/50 dark:border-amber-900/30 shadow-sm transition-all hover:shadow-md group',
-                      isElderlyMode ? 'p-6' : 'p-3'
+                      'flex flex-col bg-white/90 dark:bg-stone-900/90 backdrop-blur-sm rounded-xl border border-amber-200/60 dark:border-amber-800/40 shadow-sm transition-all hover:shadow-md cursor-pointer group shrink-0',
+                      isElderlyMode ? 'p-5' : 'w-[220px] sm:w-auto snap-start p-3'
                     )}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span
                         className={cn(
-                          'text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1.5',
-                          isElderlyMode ? 'text-xl' : 'text-[11px]'
+                          'text-amber-600 dark:text-amber-400 font-extrabold flex items-center gap-1',
+                          isElderlyMode ? 'text-xl' : 'text-xs'
                         )}
                       >
-                        <Star size={isElderlyMode ? 22 : 12} className="fill-amber-500" />
+                        <Star size={isElderlyMode ? 20 : 12} className="fill-amber-500 text-amber-500" />
                         {format(safeParseISO(evt.start_date), 'MM/dd')}
                       </span>
                       <span
                         className={cn(
-                          'font-bold text-stone-400 dark:text-stone-500 group-hover:text-amber-600 transition-colors bg-stone-100 dark:bg-stone-900/50 px-2 py-0.5 rounded-lg',
+                          'font-bold text-stone-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-md',
                           isElderlyMode ? 'text-xl' : 'text-[11px]'
                         )}
                       >
@@ -1284,15 +1308,15 @@ export default function App() {
                     </div>
                     <div
                       className={cn(
-                        'font-black text-stone-800 dark:text-stone-100 line-clamp-2 mb-2',
-                        isElderlyMode ? 'text-3xl leading-tight' : 'text-sm'
+                        'font-black text-stone-900 dark:text-stone-100 line-clamp-1 mb-1',
+                        isElderlyMode ? 'text-3xl leading-tight line-clamp-2' : 'text-sm'
                       )}
                     >
                       {evt.title}
                     </div>
                     {evt.time && formatTimeDisplay(evt.time) && (
-                      <div className="flex items-center gap-1.5 mt-auto pt-2 border-t border-amber-100/30 dark:border-amber-900/20">
-                        <Clock size={isElderlyMode ? 20 : 12} className="text-stone-400" />
+                      <div className="flex items-center gap-1 mt-auto pt-1.5 border-t border-amber-100/60 dark:border-amber-900/30">
+                        <Clock size={isElderlyMode ? 18 : 11} className="text-orange-500" />
                         <span
                           className={cn(
                             'font-bold text-stone-500 dark:text-stone-400',
@@ -1311,7 +1335,7 @@ export default function App() {
         )}
 
         {isElderlyMode ? (
-          <div className="space-y-8 pb-20">
+          <div className="space-y-6 pb-20">
             {Array.from({ length: 7 }).map((_, index) => {
               const day = addDays(new Date(), index);
               const dateKey = format(day, 'yyyy-MM-dd');
@@ -1328,18 +1352,18 @@ export default function App() {
 
               const dayTheme = isToday
                 ? {
-                    border: 'border-orange-100 dark:border-orange-900',
+                    border: 'border-orange-200 dark:border-orange-900',
                     text: 'text-orange-700 dark:text-orange-400',
                     accent: 'text-orange-600 dark:text-orange-400',
                   }
                 : isTomorrow
                   ? {
-                      border: 'border-emerald-100 dark:border-emerald-900',
+                      border: 'border-emerald-200 dark:border-emerald-900',
                       text: 'text-emerald-700 dark:text-emerald-400',
                       accent: 'text-emerald-600 dark:text-emerald-400',
                     }
                   : {
-                      border: 'border-stone-100 dark:border-stone-800',
+                      border: 'border-stone-200 dark:border-stone-800',
                       text: 'text-stone-700 dark:text-stone-300',
                       accent: 'text-stone-600 dark:text-stone-400',
                     };
@@ -1349,18 +1373,18 @@ export default function App() {
               return (
                 <div
                   key={dateKey}
-                  className={cn('bg-white dark:bg-stone-900 rounded-3xl p-6 shadow-md border-4', dayTheme.border)}
+                  className={cn('bg-white dark:bg-stone-900 rounded-3xl p-5 md:p-6 shadow-md border-4', dayTheme.border)}
                 >
-                  <div className={cn('mb-6 border-b-4 pb-4', dayTheme.border)}>
-                    <div className="flex flex-wrap items-center gap-4 mb-3">
-                      <h2 className={cn('text-4xl font-black', dayTheme.text)}>{dayLabel}</h2>
+                  <div className={cn('mb-5 border-b-4 pb-3.5', dayTheme.border)}>
+                    <div className="flex flex-wrap items-center gap-3 mb-2">
+                      <h2 className={cn('text-3xl md:text-4xl font-black', dayTheme.text)}>{dayLabel}</h2>
                       {allHolidays[dateKey] && (
-                        <span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-2xl font-bold">
+                        <span className="bg-rose-100 text-rose-700 px-3.5 py-1 rounded-xl text-xl md:text-2xl font-bold">
                           {allHolidays[dateKey]}
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 text-2xl font-bold text-stone-600 dark:text-stone-400">
+                    <div className="flex flex-wrap items-center gap-3 text-xl md:text-2xl font-bold text-stone-600 dark:text-stone-400">
                       <span>農曆 {getLunarDate(day)}</span>
                       {weatherData?.[dateKey] && (
                         <span className="flex items-center gap-2">
@@ -1373,45 +1397,47 @@ export default function App() {
                   </div>
                   <div className="space-y-4">
                     {dayEvents.length === 0 ? (
-                      <p className="text-3xl text-stone-500 font-bold py-8 text-center">這天沒有活動</p>
+                      <p className="text-2xl md:text-3xl text-stone-400 font-bold py-6 text-center">這天沒有活動</p>
                     ) : (
                       dayEvents.map((event) => (
                         <div
                           key={event.id}
-                          className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-6 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-4"
+                          className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-5 border-2 border-stone-200 dark:border-stone-700 flex flex-col gap-3"
                         >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 flex-wrap">
                               <span
-                                className="text-2xl font-black px-4 py-2 rounded-xl text-white"
+                                className="text-xl md:text-2xl font-black px-3.5 py-1.5 rounded-xl text-white"
                                 style={{ backgroundColor: event.color || '#4F46E5' }}
                               >
                                 {event.member_name}
                               </span>
                               {event.time && (
-                                <span className={cn('text-3xl font-bold', dayTheme.accent)}>
+                                <span className={cn('text-2xl md:text-3xl font-bold', dayTheme.accent)}>
                                   {formatTimeDisplay(event.time)}
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleEditClick(event)}
-                                className="p-3 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
+                                className="p-2.5 bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-300 dark:hover:bg-stone-600 transition-colors"
                               >
-                                <Edit size={28} />
+                                <Edit size={24} />
                               </button>
                               <button
                                 onClick={() => handleDeleteEvent(event)}
-                                className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
+                                className="p-2.5 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
                               >
-                                <Trash2 size={28} />
+                                <Trash2 size={24} />
                               </button>
                             </div>
                           </div>
-                          <h3 className="text-4xl font-black text-stone-900 dark:text-stone-100">{event.title}</h3>
+                          <h3 className="text-3xl md:text-4xl font-black text-stone-900 dark:text-stone-100">
+                            {event.title}
+                          </h3>
                           {event.description && (
-                            <p className="text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>
+                            <p className="text-xl md:text-2xl text-stone-600 dark:text-stone-400">{event.description}</p>
                           )}
                         </div>
                       ))
@@ -1423,231 +1449,192 @@ export default function App() {
 
             <button
               onClick={() => openCreateModal(new Date())}
-              className="w-full bg-orange-600 text-white py-6 rounded-3xl font-black text-3xl flex items-center justify-center gap-4 shadow-xl active:scale-95 transition-transform"
+              className="w-full bg-orange-600 text-white py-5 rounded-3xl font-black text-2xl md:text-3xl flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-transform"
             >
-              <Plus size={40} />
+              <Plus size={34} />
               新增活動
             </button>
           </div>
         ) : (
           <>
-            {/* Today's Weather Overview (Mobile Only) */}
+            {/* Compact Today's Weather Banner (Mobile Only) */}
             {currentWeather && (
-              <div className="md:hidden bg-gradient-to-br from-orange-600 to-violet-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-orange-200 dark:shadow-none relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <Cloud size={120} />
-                </div>
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                        <MapPin size={16} />
+              <div className="md:hidden bg-gradient-to-r from-orange-600 to-violet-700 rounded-2xl px-4 py-3 mb-3.5 text-white shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between gap-2 relative z-10">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-3xl font-black tracking-tight shrink-0">
+                      {Math.round(currentWeather.temp)}°
+                    </span>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5 text-xs font-extrabold truncate">
+                        <MapPin size={12} className="shrink-0 opacity-90" />
+                        <span className="truncate">{locationName}</span>
                       </div>
-                      <span className="text-sm font-bold tracking-wide">{locationName}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {userCoords && (
-                        <button
-                          onClick={handleSaveCurrentLocationForLine}
-                          className="text-[10px] font-bold bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg backdrop-blur-md transition-colors"
-                          title="將此位置設為每日 LINE 推播的天氣地點"
-                        >
-                          設為推播地點
-                        </button>
-                      )}
-                      <span className="text-[11px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md">
-                        即時天氣
-                      </span>
+                      <div className="flex items-center gap-1.5 text-xs font-medium opacity-90 mt-0.5">
+                        {WEATHER_ICONS[currentWeather.code]}
+                        <span>{WEATHER_DESCRIPTIONS[currentWeather.code]}</span>
+                        <span>· 濕度 {currentWeather.humidity}%</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-end justify-between">
-                    <div className="flex items-center gap-4">
-                      <span className="text-5xl font-black tracking-tighter">
-                        {Math.round(currentWeather.temp)}°
-                      </span>
-                      <div className="flex flex-col">
-                        <span className="text-lg font-bold flex items-center gap-2">
-                          {WEATHER_ICONS[currentWeather.code]}
-                          {WEATHER_DESCRIPTIONS[currentWeather.code]}
-                        </span>
-                        <span className="text-xs font-medium opacity-80">
-                          濕度 {currentWeather.humidity}% | 風速 {currentWeather.wind} km/h
-                        </span>
-                      </div>
-                    </div>
-
+                  <div className="flex flex-col items-end shrink-0 gap-1">
                     {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
-                      <div className="text-right">
-                        <div className="text-[11px] font-black uppercase tracking-widest opacity-60 mb-1">
-                          今日預估
-                        </div>
-                        <div className="text-sm font-bold">
-                          {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}° ~{' '}
-                          {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
-                        </div>
-                      </div>
+                      <span className="text-xs font-extrabold bg-white/15 px-2 py-0.5 rounded-lg backdrop-blur-sm">
+                        {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}° ~{' '}
+                        {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
+                      </span>
+                    )}
+                    {userCoords && (
+                      <button
+                        onClick={handleSaveCurrentLocationForLine}
+                        className="text-[10px] font-bold text-orange-100 underline underline-offset-2 opacity-90 hover:opacity-100"
+                        title="將此位置設為每日 LINE 推播的天氣地點"
+                      >
+                        設為推播地點
+                      </button>
                     )}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Desktop View Toggle */}
-            <div className="hidden md:flex bg-stone-200 dark:bg-stone-800 p-1 rounded-xl mb-6 w-fit">
-              <button
-                onClick={() => setViewMode('calendar')}
-                className={cn(
-                  'px-6 py-2 rounded-lg text-sm font-bold transition-all',
-                  viewMode === 'calendar'
-                    ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
-                    : 'text-stone-500 dark:text-stone-400'
-                )}
-              >
-                月曆模式
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={cn(
-                  'px-6 py-2 rounded-lg text-sm font-bold transition-all',
-                  viewMode === 'list'
-                    ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
-                    : 'text-stone-500 dark:text-stone-400'
-                )}
-              >
-                列表模式
-              </button>
+            {/* Mobile Month Navigation + Desktop View Toggle */}
+            <div className="flex items-center justify-between gap-2 mb-3 md:mb-5">
+              {/* Mobile Month Switcher */}
+              <div className="flex md:hidden items-center justify-between w-full bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-2xl px-2 py-1.5 shadow-sm">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    title="上個月"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <span className="px-2 font-black text-base text-stone-900 dark:text-stone-100 tracking-tight">
+                    {format(currentDate, 'yyyy年 MM月')}
+                  </span>
+                  <button
+                    onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    title="下個月"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    setCurrentDate(now);
+                    setSelectedDay(now);
+                  }}
+                  className="px-3 py-1 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-200/60 dark:border-orange-800/50 text-xs font-extrabold active:scale-95 transition-all"
+                >
+                  回到今天
+                </button>
+              </div>
+
+              {/* Desktop View Toggle */}
+              <div className="hidden md:flex bg-stone-200 dark:bg-stone-800 p-1 rounded-xl w-fit">
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className={cn(
+                    'px-6 py-2 rounded-lg text-sm font-bold transition-all',
+                    viewMode === 'calendar'
+                      ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
+                      : 'text-stone-500 dark:text-stone-400'
+                  )}
+                >
+                  月曆模式
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'px-6 py-2 rounded-lg text-sm font-bold transition-all',
+                    viewMode === 'list'
+                      ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
+                      : 'text-stone-500 dark:text-stone-400'
+                  )}
+                >
+                  列表模式
+                </button>
+              </div>
             </div>
 
-            {/* Filters & Settings */}
-            <div className="mb-4 md:mb-6 flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-stone-500">
-                  <Filter size={14} />
-                  <span className="text-[11px] font-black uppercase tracking-widest">篩選成員</span>
-                </div>
-
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-                  <div className="relative flex-shrink-0">
-                    <select
-                      value={activeQuickAddId || 'none'}
-                      onChange={(e) => setActiveQuickAddId(e.target.value === 'none' ? null : e.target.value)}
-                      className={cn(
-                        'appearance-none pl-4 pr-9 py-1.5 rounded-full text-[13px] font-black uppercase tracking-widest transition-all border outline-none cursor-pointer',
-                        activeQuickAddId
-                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 shadow-sm'
-                          : 'bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700'
-                      )}
-                      style={{
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'right 12px center',
-                        backgroundSize: '10px',
-                      }}
-                    >
-                      <option value="none">⚡ 一鍵新增</option>
-                      {quickAddPresets.map((preset) => (
-                        <option key={preset.id} value={preset.id}>
-                          {preset.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button
-                    onClick={() => setIsManagePresetsOpen(true)}
-                    className="flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-black uppercase tracking-widest transition-all border bg-white dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700"
-                    title="管理一鍵新增選項"
-                  >
-                    <Settings size={13} />
-                    管理活動
-                  </button>
-
-                  <div className="w-px h-4 bg-stone-200 dark:bg-stone-700 flex-shrink-0 mx-1" />
-
-                  <div className="relative flex-shrink-0">
-                    <select
-                      value={filterMember}
-                      onChange={(e) => setFilterMember(e.target.value)}
-                      className={cn(
-                        'appearance-none pl-4 pr-10 py-1.5 rounded-full text-xs font-bold transition-all border bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600 outline-none cursor-pointer shadow-sm',
-                        filterMember !== '全部' &&
-                          'border-stone-800 dark:border-stone-100 ring-1 ring-stone-800 dark:ring-stone-100'
-                      )}
-                      style={{
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'right 12px center',
-                        backgroundSize: '12px',
-                      }}
-                    >
-                      <option value="全部">全部成員</option>
-                      {FAMILY_MEMBERS.map((member) => (
-                        <option key={member} value={member}>
-                          {member}
-                        </option>
-                      ))}
-                    </select>
-                    {filterMember !== '全部' && (
-                      <div
-                        className="absolute left-2.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full pointer-events-none"
-                        style={{ backgroundColor: MEMBER_COLORS[filterMember] || '#4F46E5' }}
-                      />
-                    )}
-                  </div>
-                </div>
+            {/* Compact Single-Row Filter & Quick-Add Bar */}
+            <div className="mb-3.5 md:mb-5 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {/* 成員篩選下拉選單 */}
+              <div className="relative flex-shrink-0">
+                <select
+                  value={filterMember}
+                  onChange={(e) => setFilterMember(e.target.value)}
+                  className={cn(
+                    'appearance-none pl-3.5 pr-8 py-1.5 rounded-full text-xs font-extrabold transition-all border bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 outline-none cursor-pointer shadow-sm',
+                    filterMember !== '全部' &&
+                      'pl-6 border-stone-800 dark:border-stone-200 ring-1 ring-stone-800 dark:ring-stone-200'
+                  )}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 10px center',
+                    backgroundSize: '12px',
+                  }}
+                >
+                  <option value="全部">👥 全部成員</option>
+                  {FAMILY_MEMBERS.map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </select>
+                {filterMember !== '全部' && (
+                  <div
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none"
+                    style={{ backgroundColor: MEMBER_COLORS[filterMember] || '#4F46E5' }}
+                  />
+                )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setShowDebug(!showDebug)}
-                    className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
-                    title="偵錯資訊"
-                  >
-                    <Info size={16} />
-                  </button>
-
-                  <button
-                    onClick={() => setIsDarkMode(!isDarkMode)}
-                    className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
-                    title={isDarkMode ? '切換為淺色模式' : '切換為深色模式'}
-                  >
-                    {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-                  </button>
-                </div>
-
-                <div className="md:hidden">
-                  <div className="flex bg-stone-100 dark:bg-stone-800 p-0.5 rounded-lg">
-                    <button
-                      onClick={() => setViewMode('calendar')}
-                      className={cn(
-                        'px-3 py-1 rounded-md text-[11px] font-bold transition-all',
-                        viewMode === 'calendar'
-                          ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
-                          : 'text-stone-500 dark:text-stone-400'
-                      )}
-                    >
-                      月曆
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={cn(
-                        'px-3 py-1 rounded-md text-[11px] font-bold transition-all',
-                        viewMode === 'list'
-                          ? 'bg-white dark:bg-stone-700 shadow-sm text-orange-600 dark:text-orange-400'
-                          : 'text-stone-500 dark:text-stone-400'
-                      )}
-                    >
-                      列表
-                    </button>
-                  </div>
-                </div>
+              {/* 一鍵新增下拉選單 */}
+              <div className="relative flex-shrink-0">
+                <select
+                  value={activeQuickAddId || 'none'}
+                  onChange={(e) => setActiveQuickAddId(e.target.value === 'none' ? null : e.target.value)}
+                  className={cn(
+                    'appearance-none pl-3.5 pr-8 py-1.5 rounded-full text-xs font-extrabold transition-all border outline-none cursor-pointer shadow-sm',
+                    activeQuickAddId
+                      ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                      : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700'
+                  )}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 10px center',
+                    backgroundSize: '11px',
+                  }}
+                >
+                  <option value="none">⚡ 一鍵新增</option>
+                  {quickAddPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      ⚡ 點日期加：{preset.title}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              <button
+                onClick={() => setIsManagePresetsOpen(true)}
+                className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-extrabold transition-all border bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 shadow-sm"
+                title="管理一鍵新增選項"
+              >
+                <Settings size={13} />
+                <span>管理項目</span>
+              </button>
             </div>
 
             {error && (
-              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 flex flex-col gap-3">
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-4 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <AlertCircle size={20} />
@@ -1667,38 +1654,11 @@ export default function App() {
                 >
                   {showDebug ? '隱藏除錯資訊' : '顯示除錯資訊'}
                 </button>
-                {showDebug && configStatus && (
-                  <div className="ml-8 p-3 bg-white/50 dark:bg-stone-900/50 rounded-lg text-[11px] font-mono space-y-1">
-                    <p>
-                      Firebase 資料庫:{' '}
-                      {configStatus.firebase ? `✅ 已設定 (${configStatus.firebaseKeyLength} 字元)` : '❌ 未設定'}
-                    </p>
-                    <p>
-                      OpenAI 金鑰:{' '}
-                      {configStatus.openai ? `✅ 已設定 (${configStatus.openaiKeyLength} 字元)` : '❌ 未設定'}
-                    </p>
-                    <p>
-                      LINE 推播: {configStatus.line ? '✅ 已設定' : '❌ 未設定'} (Token{' '}
-                      {configStatus.lineAccessToken ? '✅' : '❌'} / Secret{' '}
-                      {configStatus.lineChannelSecret ? '✅' : '❌'} / GroupID{' '}
-                      {configStatus.lineGroupId ? '✅' : '❌'})
-                    </p>
-                    <p>
-                      環境: {configStatus.env?.VERCEL ? 'Vercel' : 'Local/Dev'} ({configStatus.env?.NODE_ENV})
-                    </p>
-                    {configStatus.lineSecretWarning && (
-                      <p className="mt-1 text-amber-600">{configStatus.lineSecretWarning}</p>
-                    )}
-                    <p className="mt-2 text-stone-400 dark:text-stone-500">
-                      提示：請在 Vercel 專案設定 → Environment Variables 中設定這些變數。
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 
             {warning && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 p-4 rounded-xl mb-6 flex items-center gap-3">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 p-4 rounded-xl mb-4 flex items-center gap-3">
                 <AlertTriangle size={20} className="text-amber-500" />
                 <p className="text-sm font-medium">{warning}</p>
               </div>
@@ -1722,12 +1682,17 @@ export default function App() {
 
             {/* Calendar Grid */}
             {viewMode === 'calendar' && (
-              <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800">
-                <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-800/80 backdrop-blur-md sticky top-[56px] md:top-[72px] z-30 rounded-t-2xl">
-                  {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
+              <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-sm border border-stone-200/90 dark:border-stone-800">
+                <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-800/90 backdrop-blur-md sticky top-14 md:top-[72px] z-30 rounded-t-2xl">
+                  {['日', '一', '二', '三', '四', '五', '六'].map((day, idx) => (
                     <div
                       key={day}
-                      className="py-2 md:py-3 text-center text-[11px] md:text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest"
+                      className={cn(
+                        'py-2 md:py-3 text-center text-xs font-black uppercase tracking-widest',
+                        idx === 0 || idx === 6
+                          ? 'text-rose-500/80 dark:text-rose-400/80'
+                          : 'text-stone-500 dark:text-stone-400'
+                      )}
                     >
                       {day}
                     </div>
@@ -1796,18 +1761,57 @@ export default function App() {
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, day)}
                         className={cn(
-                          'min-h-[80px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-50 dark:border-stone-800 last:border-r-0 transition-all cursor-pointer relative',
-                          !isCurrentMonth && 'bg-stone-50/30 dark:bg-stone-800/30',
-                          isSelected && 'bg-orange-50/50 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-400 z-10',
-                          isHoliday && 'bg-rose-50/30 dark:bg-rose-900/10',
-                          makeupWorkdayName && 'bg-stone-100/50 dark:bg-stone-800/50'
+                          'min-h-[94px] sm:min-h-[112px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-100 dark:border-stone-800/80 last:border-r-0 transition-all cursor-pointer relative select-none',
+                          !isCurrentMonth && 'bg-stone-50/50 dark:bg-stone-900/40 opacity-60',
+                          isSelected && 'bg-orange-50/60 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-400 z-10',
+                          isHoliday && isCurrentMonth && 'bg-rose-50/30 dark:bg-rose-950/15',
+                          makeupWorkdayName && isCurrentMonth && 'bg-stone-100/50 dark:bg-stone-800/50'
                         )}
                       >
-                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 md:mb-2 gap-1">
+                        {/* Mobile Cell Header: Clean 2-Line Stack (No Crowding) */}
+                        <div className="md:hidden flex flex-col mb-1">
+                          <div className="flex items-center justify-between px-0.5">
+                            <span
+                              className={cn(
+                                'w-6 h-6 flex items-center justify-center rounded-full text-xs font-black leading-none',
+                                isToday
+                                  ? 'bg-orange-600 text-white shadow-sm'
+                                  : isHoliday || isWeekend
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : isCurrentMonth
+                                      ? 'text-stone-800 dark:text-stone-100'
+                                      : 'text-stone-400 dark:text-stone-600'
+                              )}
+                            >
+                              {format(day, 'd')}
+                            </span>
+                            {weather && (
+                              <span className="scale-90 opacity-85 shrink-0">{WEATHER_ICONS[weather.code]}</span>
+                            )}
+                          </div>
+                          <div className="px-0.5 mt-0.5 h-[13px] flex items-center">
+                            {holidayName ? (
+                              <span className="text-[10px] leading-none font-extrabold text-rose-500 dark:text-rose-400 truncate">
+                                {holidayName}
+                              </span>
+                            ) : makeupWorkdayName ? (
+                              <span className="text-[10px] leading-none font-bold text-stone-500 dark:text-stone-400 truncate">
+                                補班
+                              </span>
+                            ) : (
+                              <span className="text-[10px] leading-none font-medium text-stone-400 dark:text-stone-500 truncate">
+                                {getLunarDate(day, true)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Desktop Cell Header */}
+                        <div className="hidden md:flex items-center justify-between mb-2 gap-1">
                           <div className="flex items-center gap-1">
                             <span
                               className={cn(
-                                'w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-xs md:text-sm font-bold',
+                                'w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold',
                                 isToday
                                   ? 'bg-orange-600 text-white shadow-md'
                                   : isHoliday || isWeekend
@@ -1819,13 +1823,13 @@ export default function App() {
                             >
                               {format(day, 'd')}
                             </span>
-                            <span className="text-[10px] md:text-[11px] text-stone-400 dark:text-stone-500 font-medium">
+                            <span className="text-[11px] text-stone-400 dark:text-stone-500 font-medium">
                               {getLunarDate(day)}
                             </span>
                             {weather && (
                               <div className="flex items-center gap-0.5 group relative">
                                 {WEATHER_ICONS[weather.code]}
-                                <div className="hidden md:flex flex-col items-start -space-y-0.5">
+                                <div className="flex flex-col items-start -space-y-0.5">
                                   <span className="text-[9px] text-stone-400 font-medium">
                                     {Math.round(weather.min)}°~{Math.round(weather.max)}°
                                   </span>
@@ -1855,12 +1859,12 @@ export default function App() {
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             {holidayName && (
-                              <span className="text-[9px] md:text-[11px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
+                              <span className="text-[11px] font-black text-rose-500 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/50">
                                 {holidayName}
                               </span>
                             )}
                             {makeupWorkdayName && (
-                              <span className="text-[9px] md:text-[11px] font-black text-stone-500 dark:text-stone-400 truncate bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700">
+                              <span className="text-[11px] font-black text-stone-500 dark:text-stone-400 truncate bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700">
                                 {makeupWorkdayName}
                               </span>
                             )}
@@ -1868,7 +1872,7 @@ export default function App() {
                         </div>
 
                         <div className="flex flex-col gap-0.5 md:gap-1 relative z-20">
-                          {/* Desktop View */}
+                          {/* Desktop Event Bars */}
                           <div className="hidden md:flex flex-col gap-1">
                             {daySlots.map((event, slotIndex) => {
                               if (!event) {
@@ -1926,14 +1930,13 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Mobile View */}
-                          <div className="md:hidden flex flex-col gap-0.5">
+                          {/* Mobile Event Bars: Clean & Legible (No Icon Clutter) */}
+                          <div className="md:hidden flex flex-col gap-1">
                             {mobileSlots.map((event, slotIndex) => {
                               if (!event) {
-                                return <div key={`empty-mobile-${slotIndex}`} className="h-[16px] invisible" />;
+                                return <div key={`empty-mobile-${slotIndex}`} className="h-[17px] invisible" />;
                               }
                               const eventTitle = String(event.title || '無標題');
-                              const icon = getEventIcon(eventTitle, 8);
                               const { start, end } = getEventDayBounds(event);
                               const isMultiDay = start.getTime() !== end.getTime();
                               const isStart = isSameDay(day, start);
@@ -1942,36 +1945,33 @@ export default function App() {
                               return (
                                 <div
                                   key={event.id}
-                                  draggable
-                                  onDragStart={(e) => handleDragStart(e, event.id)}
                                   style={{
-                                    backgroundColor: `${event.color || '#4F46E5'}15`,
-                                    borderLeft: isStart || !isMultiDay ? `2px solid ${event.color || '#4F46E5'}` : 'none',
+                                    backgroundColor: `${event.color || '#4F46E5'}18`,
+                                    borderLeft: isStart || !isMultiDay ? `2.5px solid ${event.color || '#4F46E5'}` : 'none',
                                     color: event.color || '#4F46E5',
-                                    borderTopLeftRadius: isStart || !isMultiDay ? '2px' : '0',
-                                    borderBottomLeftRadius: isStart || !isMultiDay ? '2px' : '0',
-                                    borderTopRightRadius: isEnd || !isMultiDay ? '2px' : '0',
-                                    borderBottomRightRadius: isEnd || !isMultiDay ? '2px' : '0',
-                                    marginLeft: isStart || !isMultiDay ? '0' : '-5px',
-                                    marginRight: isEnd || !isMultiDay ? '0' : '-5px',
-                                    paddingLeft: isStart || !isMultiDay ? '4px' : '6px',
-                                    paddingRight: isEnd || !isMultiDay ? '4px' : '6px',
+                                    borderTopLeftRadius: isStart || !isMultiDay ? '3px' : '0',
+                                    borderBottomLeftRadius: isStart || !isMultiDay ? '3px' : '0',
+                                    borderTopRightRadius: isEnd || !isMultiDay ? '3px' : '0',
+                                    borderBottomRightRadius: isEnd || !isMultiDay ? '3px' : '0',
+                                    marginLeft: isStart || !isMultiDay ? '0' : '-4px',
+                                    marginRight: isEnd || !isMultiDay ? '0' : '-4px',
+                                    paddingLeft: isStart || !isMultiDay ? '3px' : '5px',
+                                    paddingRight: isEnd || !isMultiDay ? '3px' : '5px',
                                     zIndex: isMultiDay ? 10 : 1,
                                   }}
                                   className={cn(
-                                    'py-0.5 text-[9px] font-bold truncate h-[16px] flex items-center gap-0.5',
+                                    'text-[10px] font-extrabold leading-none truncate h-[17px] flex items-center gap-0.5',
                                     event.syncing && 'opacity-50 animate-pulse'
                                   )}
                                 >
-                                  {event.is_important && <span className="shrink-0 text-amber-500">⭐</span>}
-                                  {icon && <span className="shrink-0">{icon}</span>}
+                                  {event.is_important && <span className="shrink-0 text-[8px]">⭐</span>}
                                   <span className="truncate">{eventTitle}</span>
                                 </div>
                               );
                             })}
                             {mobileOverflow.length > 0 && (
-                              <div className="text-[8px] text-stone-400 font-black pl-0.5">
-                                +{mobileOverflow.length}
+                              <div className="text-[9px] leading-none text-stone-400 dark:text-stone-500 font-extrabold pl-0.5">
+                                +{mobileOverflow.length} 則
                               </div>
                             )}
                           </div>
@@ -1983,44 +1983,44 @@ export default function App() {
               </div>
             )}
 
-            {/* Dashboard Statistics */}
+            {/* Dashboard Statistics: 2-Col on Mobile, 3-Col on Desktop */}
             {viewMode === 'calendar' && (
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0">
-                    <Car size={24} />
+              <div className="mt-5 md:mt-8 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                <div className="bg-white dark:bg-stone-900 rounded-2xl p-3.5 md:p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-3 md:gap-4">
+                  <div className="w-10 h-10 md:w-12 md:h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0">
+                    <Car size={20} className="md:w-6 md:h-6" />
                   </div>
-                  <div>
-                    <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">
+                  <div className="min-w-0">
+                    <p className="text-[10px] md:text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-0.5 truncate">
                       本月全家出遊
                     </p>
-                    <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
+                    <p className="text-xl md:text-2xl font-black text-stone-900 dark:text-stone-100">
                       {monthlyStats.familyOutings}{' '}
-                      <span className="text-sm font-bold text-stone-400 dark:text-stone-500">次</span>
+                      <span className="text-xs md:text-sm font-bold text-stone-400 dark:text-stone-500">次</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
-                    <Coffee size={24} />
+                <div className="bg-white dark:bg-stone-900 rounded-2xl p-3.5 md:p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex items-center gap-3 md:gap-4">
+                  <div className="w-10 h-10 md:w-12 md:h-12 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                    <Coffee size={20} className="md:w-6 md:h-6" />
                   </div>
-                  <div>
-                    <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">
+                  <div className="min-w-0">
+                    <p className="text-[10px] md:text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-0.5 truncate">
                       本月排休總計
                     </p>
-                    <p className="text-2xl font-black text-stone-900 dark:text-stone-100">
+                    <p className="text-xl md:text-2xl font-black text-stone-900 dark:text-stone-100">
                       {monthlyStats.totalLeaveDays}{' '}
-                      <span className="text-sm font-bold text-stone-400 dark:text-stone-500">天</span>
+                      <span className="text-xs md:text-sm font-bold text-stone-400 dark:text-stone-500">天</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col justify-center">
-                  <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3">
+                <div className="col-span-2 md:col-span-1 bg-white dark:bg-stone-900 rounded-2xl p-4 md:p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col justify-center">
+                  <p className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-2.5">
                     各成員排休天數
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5 md:gap-2">
                     {FAMILY_MEMBERS.filter((m) => m !== '全家').map((member) => {
                       const leaveCount = monthlyStats.memberLeaveDays[member] || 0;
                       if (leaveCount === 0) return null;
@@ -2028,16 +2028,14 @@ export default function App() {
                       return (
                         <div
                           key={member}
-                          className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-lg border border-stone-100 dark:border-stone-700"
+                          className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-800 px-2.5 py-1 rounded-lg border border-stone-100 dark:border-stone-700"
                         >
                           <div
-                            className="w-1.5 h-1.5 rounded-full"
+                            className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: MEMBER_COLORS[member] || '#4F46E5' }}
                           />
-                          <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300">{member}</span>
-                          <span className="text-[11px] font-black text-stone-900 dark:text-stone-100">
-                            {leaveCount}
-                          </span>
+                          <span className="text-xs font-bold text-stone-600 dark:text-stone-300">{member}</span>
+                          <span className="text-xs font-black text-stone-900 dark:text-stone-100">{leaveCount}</span>
                         </div>
                       );
                     })}
@@ -2051,18 +2049,18 @@ export default function App() {
 
             {/* Upcoming Events */}
             {viewMode === 'calendar' && (
-              <div className="mt-8 md:mt-10">
-                <div className="flex items-center justify-between mb-4">
+              <div className="mt-6 md:mt-10">
+                <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-sm md:text-base font-black text-stone-900 dark:text-stone-100 uppercase tracking-widest flex items-center gap-2">
-                    <div className="w-1 h-5 bg-emerald-500 rounded-full" />
+                    <div className="w-1 h-4 md:h-5 bg-emerald-500 rounded-full" />
                     接下來的活動
                   </h3>
-                  <span className="text-[11px] font-bold text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">
-                    近期 {upcomingEvents.length} 個活動
+                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 bg-stone-200/70 dark:bg-stone-800 px-2.5 py-1 rounded-lg">
+                    近期 {upcomingEvents.length} 筆
                   </span>
                 </div>
 
-                <div className="flex overflow-x-auto gap-4 pb-6 -mx-4 px-4 md:mx-0 md:px-0 snap-x no-scrollbar">
+                <div className="flex overflow-x-auto gap-3 md:gap-4 pb-4 -mx-2.5 px-2.5 md:mx-0 md:px-0 snap-x no-scrollbar">
                   {upcomingEvents.length === 0 ? (
                     <div className="w-full bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-2xl p-8 text-center shadow-sm">
                       <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-3 text-stone-300 dark:text-stone-600">
@@ -2074,21 +2072,22 @@ export default function App() {
                     upcomingEvents.map((event) => (
                       <div
                         key={event.id}
-                        className="snap-center shrink-0 w-[260px] md:w-[300px] bg-white dark:bg-stone-900 rounded-2xl p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col gap-3 hover:shadow-md transition-all"
+                        onClick={() => handleEditClick(event)}
+                        className="snap-start shrink-0 w-[240px] md:w-[290px] bg-white dark:bg-stone-900 rounded-2xl p-4 md:p-5 shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col gap-2.5 hover:shadow-md transition-all cursor-pointer"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div
-                              className="w-8 h-8 rounded-lg flex items-center justify-center"
+                              className="w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center"
                               style={{
                                 backgroundColor: `${event.color || '#4F46E5'}15`,
                                 color: event.color || '#4F46E5',
                               }}
                             >
-                              {getEventIcon(event.title || '', 16) || <User size={16} />}
+                              {getEventIcon(event.title || '', 15) || <User size={15} />}
                             </div>
                             <span
-                              className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5"
+                              className="text-xs font-black px-2 py-0.5 rounded-lg flex items-center gap-1.5"
                               style={{
                                 backgroundColor: `${event.color || '#4F46E5'}15`,
                                 color: event.color || '#4F46E5',
@@ -2108,21 +2107,24 @@ export default function App() {
                               ` - ${format(safeParseISO(event.end_date), 'MM/dd')}`}
                           </span>
                         </div>
-                        <h4 className="font-black text-stone-900 dark:text-stone-100 text-base truncate">{event.title}</h4>
-                        <div className="flex items-center gap-3 mt-auto pt-2">
-                          {event.time && (
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50/50 dark:bg-orange-900/20 px-2 py-1 rounded-lg">
-                              <Clock size={14} />
-                              {formatTimeDisplay(event.time)}
-                            </div>
-                          )}
-                          {event.description && (
-                            <div className="flex items-center gap-1.5 text-xs font-medium text-stone-500 dark:text-stone-400 truncate">
-                              <Filter size={14} className="opacity-50" />
-                              <span className="truncate">{event.description}</span>
-                            </div>
-                          )}
-                        </div>
+                        <h4 className="font-black text-stone-900 dark:text-stone-100 text-sm md:text-base truncate">
+                          {event.title}
+                        </h4>
+                        {(event.time || event.description) && (
+                          <div className="flex items-center gap-2 mt-auto pt-1">
+                            {event.time && (
+                              <div className="flex items-center gap-1 text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50/70 dark:bg-orange-900/20 px-2 py-0.5 rounded-md shrink-0">
+                                <Clock size={12} />
+                                {formatTimeDisplay(event.time)}
+                              </div>
+                            )}
+                            {event.description && (
+                              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 truncate">
+                                {event.description}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -2132,47 +2134,43 @@ export default function App() {
 
             {/* List View Mode */}
             {viewMode === 'list' && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {listViewDays.map(({ day, dateKey, dayEvents }) => {
                   const weather = weatherData?.[dateKey];
                   return (
                     <div key={dateKey}>
-                      <h3 className="text-xs font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-3 sticky top-[56px] md:top-[72px] bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10 flex items-center justify-between">
+                      <h3 className="text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-2.5 sticky top-14 md:top-[72px] bg-orange-50/95 dark:bg-stone-950/95 backdrop-blur-sm py-2 z-10 flex items-center justify-between">
                         <span>
                           {format(day, 'MM月dd日 EEEE', { locale: zhTW })}{' '}
-                          <span className="text-stone-400 dark:text-stone-600 font-medium ml-2">
-                            農曆 {getLunarDate(day)}
+                          <span className="text-stone-400 dark:text-stone-500 font-medium ml-1.5">
+                            農曆{getLunarDate(day)}
                           </span>
                         </span>
                         {weather && (
-                          <div className="flex items-center gap-2 text-[11px] normal-case tracking-normal font-bold">
+                          <div className="flex items-center gap-1.5 text-[11px] normal-case tracking-normal font-bold">
                             <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
                               {WEATHER_ICONS[weather.code]}
-                              {WEATHER_DESCRIPTIONS[weather.code]}
+                              <span className="hidden sm:inline">{WEATHER_DESCRIPTIONS[weather.code]}</span>
                             </span>
-                            <span className="text-stone-300 dark:text-stone-700">|</span>
                             <span className="text-stone-500 dark:text-stone-400">
                               {Math.round(weather.min)}°~{Math.round(weather.max)}°
                             </span>
                             {weather.pop !== undefined && (
-                              <>
-                                <span className="text-stone-300 dark:text-stone-700">|</span>
-                                <span className="text-blue-500 dark:text-blue-400 flex items-center gap-1">
-                                  <CloudRain size={10} /> {weather.pop}%
-                                </span>
-                              </>
+                              <span className="text-blue-500 dark:text-blue-400 flex items-center gap-0.5">
+                                <CloudRain size={10} /> {weather.pop}%
+                              </span>
                             )}
                           </div>
                         )}
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 md:gap-3">
                         {dayEvents.map((event) => (
                           <div
                             key={`${dateKey}-${event.id}`}
-                            className="bg-white dark:bg-stone-900 rounded-xl p-4 shadow-sm border border-stone-100 dark:border-stone-800 flex items-start gap-4"
+                            className="bg-white dark:bg-stone-900 rounded-2xl p-3.5 md:p-4 shadow-sm border border-stone-100 dark:border-stone-800 flex items-start gap-3.5"
                           >
                             <div
-                              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                               style={{
                                 backgroundColor: `${event.color || '#4F46E5'}15`,
                                 color: event.color || '#4F46E5',
@@ -2183,7 +2181,7 @@ export default function App() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-1">
                                 <span
-                                  className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit"
+                                  className="text-xs font-black px-2.5 py-0.5 rounded-lg flex items-center gap-1.5 w-fit"
                                   style={{
                                     backgroundColor: `${event.color || '#4F46E5'}15`,
                                     color: event.color || '#4F46E5',
@@ -2195,32 +2193,36 @@ export default function App() {
                                   />
                                   {event.member_name}
                                 </span>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   <button
                                     onClick={() => handleEditClick(event)}
-                                    className="p-1 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                                    className="p-1.5 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                                   >
                                     <Edit size={16} />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteEvent(event)}
-                                    className="p-1 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                                    className="p-1.5 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                                   >
                                     <Trash2 size={16} />
                                   </button>
                                 </div>
                               </div>
-                              <h4 className="font-bold text-stone-900 dark:text-stone-100">{event.title}</h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                {event.time && (
-                                  <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                    <Clock size={10} /> {formatTimeDisplay(event.time)}
-                                  </span>
-                                )}
-                                {event.description && (
-                                  <p className="text-xs text-stone-500 dark:text-stone-400">{event.description}</p>
-                                )}
-                              </div>
+                              <h4 className="font-bold text-stone-900 dark:text-stone-100 text-sm md:text-base">
+                                {event.title}
+                              </h4>
+                              {(event.time || event.description) && (
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  {event.time && (
+                                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                      <Clock size={11} /> {formatTimeDisplay(event.time)}
+                                    </span>
+                                  )}
+                                  {event.description && (
+                                    <p className="text-xs text-stone-500 dark:text-stone-400">{event.description}</p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2242,34 +2244,35 @@ export default function App() {
 
       {/* Bottom Navigation Bar for Mobile */}
       {!isElderlyMode && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-stone-200/80 dark:border-stone-800 px-8 py-2 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <button
             onClick={() => setViewMode('calendar')}
             className={cn(
-              'flex flex-col items-center gap-1 transition-all',
+              'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
               viewMode === 'calendar' ? 'text-orange-600 dark:text-orange-400' : 'text-stone-400 dark:text-stone-500'
             )}
           >
             <CalendarIcon size={20} />
-            <span className="text-[11px] font-black uppercase tracking-widest">月曆</span>
+            <span className="text-[11px] font-extrabold">月曆</span>
           </button>
 
           <button
-            onClick={() => openCreateModal(new Date())}
-            className="w-14 h-14 bg-orange-600 text-white rounded-full shadow-xl flex items-center justify-center -translate-y-8 border-4 border-stone-50 dark:border-stone-950 active:scale-90 transition-all"
+            onClick={() => openCreateModal(selectedDay)}
+            className="w-14 h-14 bg-orange-600 text-white rounded-full shadow-lg shadow-orange-600/30 flex items-center justify-center -translate-y-5 border-4 border-orange-50 dark:border-stone-950 active:scale-90 transition-all"
+            title="新增活動"
           >
-            <Plus size={28} />
+            <Plus size={26} />
           </button>
 
           <button
             onClick={() => setViewMode('list')}
             className={cn(
-              'flex flex-col items-center gap-1 transition-all',
+              'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
               viewMode === 'list' ? 'text-orange-600 dark:text-orange-400' : 'text-stone-400 dark:text-stone-500'
             )}
           >
             <Clock size={20} />
-            <span className="text-[11px] font-black uppercase tracking-widest">列表</span>
+            <span className="text-[11px] font-extrabold">列表</span>
           </button>
         </nav>
       )}

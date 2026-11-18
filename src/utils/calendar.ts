@@ -195,12 +195,15 @@ export function normalizeDateForInput(d: unknown): string {
   return s.replace(/\//g, '-').split(' ')[0];
 }
 
-export function getLunarDate(date: Date): string {
+export function getLunarDate(date: Date, compact = false): string {
   try {
     const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const lunar = solar.getLunar();
     const jieQi = lunar.getJieQi();
     const lunarStr = lunar.getDay() === 1 ? `${lunar.getMonthInChinese()}月` : lunar.getDayInChinese();
+    if (compact) {
+      return jieQi || lunarStr;
+    }
     return jieQi ? `${lunarStr} ${jieQi}` : lunarStr;
   } catch {
     return '';
