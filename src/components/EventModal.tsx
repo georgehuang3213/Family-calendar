@@ -149,34 +149,50 @@ export function EventModal({
             )}
 
             {showEndAndTime && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={cn('block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5', isElderlyMode ? 'text-xl' : 'text-xs')}>
-                    開始時間 (選填)
-                  </label>
-                  <input
-                    type="time"
-                    value={newEvent.start_time || ''}
-                    onChange={(e) => onChange((prev) => ({ ...prev, start_time: e.target.value }))}
-                    className={cn(
-                      'w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100',
-                      isElderlyMode ? 'px-6 py-4 text-2xl' : 'px-4 py-2.5 text-sm'
-                    )}
-                  />
-                </div>
-                <div>
-                  <label className={cn('block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5', isElderlyMode ? 'text-xl' : 'text-xs')}>
-                    結束時間 (選填)
-                  </label>
-                  <input
-                    type="time"
-                    value={newEvent.end_time || ''}
-                    onChange={(e) => onChange((prev) => ({ ...prev, end_time: e.target.value }))}
-                    className={cn(
-                      'w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100',
-                      isElderlyMode ? 'px-6 py-4 text-2xl' : 'px-4 py-2.5 text-sm'
-                    )}
-                  />
+              <div className="space-y-2">
+                {editingEventId && newEvent.time && !newEvent.start_time && !newEvent.end_time && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/40 text-xs">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 truncate">
+                      原時間文字：{newEvent.time}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onChange((prev) => ({ ...prev, time: '' }))}
+                      className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline shrink-0"
+                    >
+                      清除時間
+                    </button>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={cn('block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5', isElderlyMode ? 'text-xl' : 'text-xs')}>
+                      開始時間 (選填)
+                    </label>
+                    <input
+                      type="time"
+                      value={newEvent.start_time || ''}
+                      onChange={(e) => onChange((prev) => ({ ...prev, start_time: e.target.value }))}
+                      className={cn(
+                        'w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100',
+                        isElderlyMode ? 'px-6 py-4 text-2xl' : 'px-4 py-2.5 text-sm'
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <label className={cn('block font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-1.5', isElderlyMode ? 'text-xl' : 'text-xs')}>
+                      結束時間 (選填)
+                    </label>
+                    <input
+                      type="time"
+                      value={newEvent.end_time || ''}
+                      onChange={(e) => onChange((prev) => ({ ...prev, end_time: e.target.value }))}
+                      className={cn(
+                        'w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-stone-900 dark:text-stone-100',
+                        isElderlyMode ? 'px-6 py-4 text-2xl' : 'px-4 py-2.5 text-sm'
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
             )}

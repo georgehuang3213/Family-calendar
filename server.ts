@@ -1014,8 +1014,16 @@ async function startServer() {
           const allEvents = snapshot.docs.map((doc) => doc.data());
 
           const filtered = allEvents
-            .filter((e: any) => e.is_important === true && String(e.end_date || e.start_date || '') >= nowStr)
-            .sort((a: any, b: any) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
+            .filter((e: any) => {
+              if (!e.is_important) return false;
+              const end = normalizeEventDate(e.end_date || e.start_date || '');
+              return typeof end === 'string' && end >= nowStr;
+            })
+            .sort((a: any, b: any) =>
+              String(normalizeEventDate(a.start_date) || '').localeCompare(
+                String(normalizeEventDate(b.start_date) || '')
+              )
+            );
 
           if (filtered.length === 0) {
             return lineClient.replyMessage(event.replyToken, {
@@ -1075,13 +1083,21 @@ async function startServer() {
           const allEvents = snapshot.docs.map((doc) => doc.data());
 
           const importantEvents = allEvents
-            .filter((e: any) => e.is_important === true && String(e.end_date || e.start_date || '') >= nowStr)
-            .sort((a: any, b: any) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
+            .filter((e: any) => {
+              if (!e.is_important) return false;
+              const end = normalizeEventDate(e.end_date || e.start_date || '');
+              return typeof end === 'string' && end >= nowStr;
+            })
+            .sort((a: any, b: any) =>
+              String(normalizeEventDate(a.start_date) || '').localeCompare(
+                String(normalizeEventDate(b.start_date) || '')
+              )
+            );
 
           const filtered = allEvents
             .filter((e: any) => {
-              const evStart = String(e.start_date || '');
-              const evEnd = String(e.end_date || evStart);
+              const evStart = String(normalizeEventDate(e.start_date) || '');
+              const evEnd = String(normalizeEventDate(e.end_date || e.start_date) || evStart);
               if (!evStart) return false;
 
               const dateMatch = isRange

@@ -162,6 +162,7 @@ export default function App() {
   const eventsRevRef = useRef<number | null>(null);
   const pollCountRef = useRef(0);
   const eventsLengthRef = useRef(0);
+  const fetchedHolidayYearsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     eventsLengthRef.current = events.length;
@@ -304,6 +305,8 @@ export default function App() {
   };
 
   const fetchHolidays = async (year: number) => {
+    if (fetchedHolidayYearsRef.current.has(year)) return;
+    fetchedHolidayYearsRef.current.add(year);
     try {
       const response = await apiFetch(`/api/taiwan-calendar?year=${year}`);
       if (!response.ok) {
@@ -340,6 +343,7 @@ export default function App() {
         setMakeupWorkdays((prev) => ({ ...prev, ...data.makeupWorkdays }));
       }
     } catch (e) {
+      fetchedHolidayYearsRef.current.delete(year);
       console.error('Holiday fetch error:', e);
     }
   };
@@ -468,7 +472,6 @@ export default function App() {
     };
     initLocationAndWeather();
 
-    fetchHolidays(currentDate.getFullYear());
     fetchConfigStatus();
 
     apiFetch('/api/config/quick-add-presets')
@@ -581,8 +584,12 @@ export default function App() {
 
   useEffect(() => {
     if (!authed) return;
+    const startYear = startOfWeek(startOfMonth(currentDate)).getFullYear();
+    const endYear = endOfWeek(endOfMonth(currentDate)).getFullYear();
     fetchHolidays(currentDate.getFullYear());
-  }, [authed, currentDate.getFullYear()]);
+    if (startYear !== currentDate.getFullYear()) fetchHolidays(startYear);
+    if (endYear !== currentDate.getFullYear()) fetchHolidays(endYear);
+  }, [authed, currentDate.getFullYear(), currentDate.getMonth()]);
 
   const allHolidays = useMemo(() => {
     return { ...HOLIDAYS_2026, ...dynamicHolidays };
@@ -1530,24 +1537,24 @@ export default function App() {
             {/* Integrated Mobile Month Switcher + Weather Bar / Desktop View Toggle */}
             <div className="flex items-center justify-between gap-2 mb-2.5 md:mb-5">
               {/* Mobile Unified Bar: Month Navigation (Left) + Weather Pill & Today (Right) */}
-              <div className="flex md:hidden items-center justify-between w-full bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-2xl px-2 py-1.5 shadow-sm gap-1">
-                <div className="flex items-center">
+              <div className="flex md:hidden items-center justify-between w-full bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-2xl px-1.5 py-1.5 shadow-sm gap-1 min-w-0">
+                <div className="flex items-center min-w-0">
                   <button
                     onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all shrink-0"
                     title="上個月"
                   >
-                    <ChevronLeft size={19} />
+                    <ChevronLeft size={18} />
                   </button>
-                  <span className="px-1.5 font-black text-[15px] text-stone-900 dark:text-stone-100 tracking-tight whitespace-nowrap">
+                  <span className="px-1 font-black text-sm min-[360px]:text-[15px] text-stone-900 dark:text-stone-100 tracking-tight whitespace-nowrap">
                     {format(currentDate, 'yyyy年 MM月')}
                   </span>
                   <button
                     onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all shrink-0"
                     title="下個月"
                   >
-                    <ChevronRight size={19} />
+                    <ChevronRight size={18} />
                   </button>
                   <button
                     onClick={() => {
@@ -1555,7 +1562,7 @@ export default function App() {
                       setCurrentDate(now);
                       setSelectedDay(now);
                     }}
-                    className="ml-1 px-2 py-0.5 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-200/60 dark:border-orange-800/50 text-[11px] font-extrabold active:scale-95 transition-all whitespace-nowrap"
+                    className="ml-0.5 px-2 py-0.5 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-200/60 dark:border-orange-800/50 text-[11px] font-extrabold active:scale-95 transition-all whitespace-nowrap shrink-0"
                   >
                     今天
                   </button>
@@ -1582,12 +1589,12 @@ export default function App() {
                         );
                       }
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-orange-600 to-violet-600 text-white text-xs font-extrabold shadow-xs active:scale-95 transition-transform min-w-0 shrink-0"
+                    className="flex items-center gap-1 px-2 py-1 rounded-xl bg-gradient-to-r from-orange-600 to-violet-600 text-white text-xs font-extrabold shadow-xs active:scale-95 transition-transform min-w-0 shrink-0"
                     title="點擊查看詳細天氣或設為 LINE 推播地點"
                   >
                     <span className="shrink-0">{WEATHER_ICONS[currentWeather.code]}</span>
                     <span className="font-black">{Math.round(currentWeather.temp)}°</span>
-                    <span className="text-[10px] font-bold text-orange-100 truncate max-w-[68px]">
+                    <span className="hidden min-[360px]:inline text-[10px] font-bold text-orange-100 truncate max-w-[56px]">
                       {locationName.split(' ').pop() || locationName}
                     </span>
                   </button>
@@ -1682,6 +1689,17 @@ export default function App() {
                 </select>
               </div>
 
+              {activeQuickAddId && (
+                <button
+                  type="button"
+                  onClick={() => setActiveQuickAddId(null)}
+                  className="flex-shrink-0 px-2.5 py-1.5 rounded-full text-xs font-extrabold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-100 transition-colors"
+                  title="結束一鍵新增模式"
+                >
+                  ✕ 結束一鍵
+                </button>
+              )}
+
               <button
                 onClick={() => setIsManagePresetsOpen(true)}
                 className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-extrabold transition-all border bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 shadow-sm"
@@ -1762,36 +1780,42 @@ export default function App() {
                   {calendarDays.map((day) => {
                     const dayEvents = filteredEvents.filter((e) => isEventOnDate(e, day));
 
-                    const maxDisplaySlots = 4;
-                    const daySlots: Array<CalendarEvent | null> = new Array(maxDisplaySlots).fill(null);
-                    const dayOverflow: CalendarEvent[] = [];
-                    let lastDesktopSlot = -1;
+                    const packDaySlots = (maxSlots: number) => {
+                      const slots: Array<CalendarEvent | null> = new Array(maxSlots).fill(null);
+                      const overflowCandidates: CalendarEvent[] = [];
 
-                    dayEvents.forEach((event) => {
-                      const lane = eventLanes[event.id] ?? 999;
-                      if (lane < maxDisplaySlots) {
-                        daySlots[lane] = event;
-                        if (lane > lastDesktopSlot) lastDesktopSlot = lane;
-                      } else {
-                        dayOverflow.push(event);
-                      }
-                    });
-                    const activeDaySlots = lastDesktopSlot >= 0 ? daySlots.slice(0, lastDesktopSlot + 1) : [];
+                      dayEvents.forEach((event) => {
+                        const lane = eventLanes[event.id] ?? 999;
+                        if (lane < maxSlots && slots[lane] === null) {
+                          slots[lane] = event;
+                        } else {
+                          overflowCandidates.push(event);
+                        }
+                      });
 
-                    const maxMobileSlots = 3;
-                    const mobileSlots: Array<CalendarEvent | null> = new Array(maxMobileSlots).fill(null);
-                    const mobileOverflow: CalendarEvent[] = [];
-                    let lastMobileSlot = -1;
-                    dayEvents.forEach((event) => {
-                      const lane = eventLanes[event.id] ?? 999;
-                      if (lane < maxMobileSlots) {
-                        mobileSlots[lane] = event;
-                        if (lane > lastMobileSlot) lastMobileSlot = lane;
-                      } else {
-                        mobileOverflow.push(event);
+                      // Fill any free slots on this day so events never get pushed into "+N 則" on otherwise empty days
+                      const remainingOverflow: CalendarEvent[] = [];
+                      overflowCandidates.forEach((event) => {
+                        const freeIdx = slots.findIndex((s) => s === null);
+                        if (freeIdx !== -1) {
+                          slots[freeIdx] = event;
+                        } else {
+                          remainingOverflow.push(event);
+                        }
+                      });
+
+                      let lastUsed = -1;
+                      for (let i = 0; i < slots.length; i++) {
+                        if (slots[i] !== null) lastUsed = i;
                       }
-                    });
-                    const activeMobileSlots = lastMobileSlot >= 0 ? mobileSlots.slice(0, lastMobileSlot + 1) : [];
+                      return {
+                        activeSlots: lastUsed >= 0 ? slots.slice(0, lastUsed + 1) : [],
+                        overflow: remainingOverflow,
+                      };
+                    };
+
+                    const { activeSlots: activeDaySlots, overflow: dayOverflow } = packDaySlots(4);
+                    const { activeSlots: activeMobileSlots, overflow: mobileOverflow } = packDaySlots(3);
 
                     const isToday = isSameDay(day, new Date());
                     const isCurrentMonth = isSameMonth(day, monthStart);
@@ -1827,7 +1851,7 @@ export default function App() {
                         onDrop={(e) => handleDrop(e, day)}
                         className={cn(
                           'min-h-[76px] sm:min-h-[98px] md:min-h-[130px] p-1 md:p-2 border-r border-b border-stone-100 dark:border-stone-800/80 last:border-r-0 transition-all cursor-pointer relative select-none',
-                          !isCurrentMonth && 'bg-stone-50/50 dark:bg-stone-900/40 opacity-60',
+                          !isCurrentMonth && 'bg-stone-50/70 dark:bg-stone-900/50',
                           isSelected && 'bg-orange-50/60 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-400 z-10',
                           isHoliday && isCurrentMonth && 'bg-rose-50/30 dark:bg-rose-950/15',
                           makeupWorkdayName && isCurrentMonth && 'bg-stone-100/50 dark:bg-stone-800/50'
@@ -1904,7 +1928,12 @@ export default function App() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[11px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200">
+                                <div
+                                  className={cn(
+                                    'absolute bottom-full mb-1 hidden group-hover:block bg-stone-900/95 dark:bg-stone-800/95 text-white text-[11px] py-1.5 px-2.5 rounded-lg shadow-xl backdrop-blur-sm border border-white/10 whitespace-nowrap z-50 animate-in fade-in zoom-in duration-200',
+                                    dayOfWeek === 0 ? 'left-0' : dayOfWeek === 6 ? 'right-0' : 'left-1/2 -translate-x-1/2'
+                                  )}
+                                >
                                   <div className="flex flex-col gap-0.5">
                                     <span className="font-bold text-amber-400">
                                       {WEATHER_DESCRIPTIONS[weather.code] || '未知天氣'}
@@ -2381,12 +2410,14 @@ export default function App() {
       {toast && (
         <div
           className={cn(
-            'fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300',
+            'fixed top-5 left-1/2 -translate-x-1/2 z-[100] w-max max-w-[calc(100vw-24px)] sm:max-w-md px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-4 duration-300',
             toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
           )}
         >
-          {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-          <span className="text-sm font-black tracking-tight">{toast.message}</span>
+          <span className="shrink-0">
+            {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          </span>
+          <span className="text-xs sm:text-sm font-black tracking-tight leading-snug">{toast.message}</span>
           {toast.action && (
             <button
               onClick={() => {
@@ -2394,7 +2425,7 @@ export default function App() {
                 setToast(null);
                 a.onClick();
               }}
-              className="ml-2 px-2.5 py-1 rounded-lg bg-white/25 hover:bg-white/40 text-xs font-black tracking-tight transition-colors"
+              className="ml-1 px-2.5 py-1 rounded-lg bg-white/25 hover:bg-white/40 text-xs font-black tracking-tight transition-colors shrink-0 whitespace-nowrap"
             >
               {toast.action.label}
             </button>
@@ -2477,7 +2508,7 @@ export default function App() {
       />
 
       {loading && (
-        <div className="fixed bottom-24 md:bottom-6 right-24 md:right-24 bg-white dark:bg-stone-800 px-4 py-2 rounded-full shadow-lg border border-stone-100 dark:border-stone-700 flex items-center gap-2 animate-pulse z-20">
+        <div className="hidden md:flex fixed bottom-6 right-24 bg-white dark:bg-stone-800 px-4 py-2 rounded-full shadow-lg border border-stone-100 dark:border-stone-700 items-center gap-2 animate-pulse z-20">
           <Clock size={16} className="text-orange-600 animate-spin" />
           <span className="text-xs font-bold text-stone-600 dark:text-stone-400 uppercase tracking-wider">同步中</span>
         </div>
