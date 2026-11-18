@@ -1,10 +1,9 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// 使用 firebase-admin（服務帳戶）寫入 Firestore，與後端 server.ts 一致。
+import 'dotenv/config';
+import { FieldValue } from 'firebase-admin/firestore';
+import { v4 as uuidv4 } from 'uuid';
+import { getDb, bumpEventsRev } from '../lib/firebaseAdmin.js';
+import { normalizeEventDate } from '../lib/taipeiTime.js';
 
 const EXCEL_DATA = [
   { title: '家族旅遊', start_date: '2026/3/28', end_date: '2026/3/29', time: '', member_name: '全家', color: '#111827', companions: '' },
@@ -58,7 +57,7 @@ const EXCEL_DATA = [
   { title: '上班', start_date: '2026/4/28', end_date: '2026/4/28', time: '08:00 - 17:30', member_name: '黃郁慈', color: '#EA580C', companions: '' },
   { title: '上班', start_date: '2026/4/24', end_date: '2026/4/24', time: '08:00 - 17:30', member_name: '黃郁慈', color: '#EA580C', companions: '' },
   { title: '送貨', start_date: '2026/4/15', end_date: '2026/4/15', time: '09:15 - 12:15', member_name: '黃郁婷', color: '#DB2777', companions: '江雪卿,黃郁慈,郭品彤' },
-  { title: '濟州島七日遊', start_date: '2026/10/10', end_date: '2026/10/16', time: '07:00 - 21:00', member_name: '江雪卿', color: '#E11D48', companions: '黃郁婷,黃力維,黃郁慈,郭品佑,郭品彤' },
+  { title: '濟州島七日遊', start_date: '2026/10/10', end_date: '2026/10/16', time: '07:00 - 21:00', member_name: '江雪卿', color: '#E11D48', companions: '黃郁婷,郭力維,黃郁慈,郭品佑,郭品彤' },
   { title: '安適洗牙', start_date: '2026/4/21', end_date: '2026/4/21', time: '18:45 - 18:50', member_name: '黃郁慈', color: '#EA580C', companions: '郭品佑' },
   { title: '安適洗牙', start_date: '2026/4/21', end_date: '2026/4/21', time: '15:30 - 16:30', member_name: '黃郁婷', color: '#0891B2', companions: '江雪卿' },
   { title: '上班', start_date: '2026/4/27', end_date: '2026/4/27', time: '08:00 - 17:30', member_name: '黃郁慈', color: '#EA580C', companions: '' },
@@ -76,27 +75,37 @@ const EXCEL_DATA = [
 ];
 
 async function importFromUpload() {
-  try {
-    console.log(`Starting import of ${EXCEL_DATA.length} records...`);
-    for (const item of EXCEL_DATA) {
-      // Need to format dates to yyyy-mm-dd
-      const formatDate = (dateStr: string) => {
-        const [y, m, d] = dateStr.split('/');
-        return `${y}-${m.length === 1 ? '0' + m : m}-${d.length === 1 ? '0' + d : d}`;
-      };
-      
-      const formattedItem = {
-        ...item,
-        start_date: formatDate(item.start_date),
-        end_date: formatDate(item.end_date),
-      };
-      await addDoc(collection(db, 'events'), formattedItem);
-      console.log(`Imported: ${item.title}`);
-    }
-    console.log('Import completed successfully.');
-  } catch (error) {
-    console.error('Import failed:', error);
+  const db = getDb();
+  if (!db) {
+    throw new Error('缺少 FIREBASE_SERVICE_ACCOUNT_KEY 環境變數（請在 .env 設定服務帳戶 JSON）。');
   }
+
+  if (!process.argv.includes('--yes')) {
+    console.log(`⚠️ 即將匯入 ${EXCEL_DATA.length} 筆預設資料至 Firestore events 集合。`);
+    console.log('若確定要執行，請加上 --yes 參數：npx tsx scripts/import_excel.ts --yes');
+    return;
+  }
+
+  console.log(`Starting import of ${EXCEL_DATA.length} records...`);
+  for (const item of EXCEL_DATA) {
+    const id = uuidv4();
+    const formattedItem = {
+      ...item,
+      id,
+      description: '',
+      is_important: false,
+      start_date: String(normalizeEventDate(item.start_date)),
+      end_date: String(normalizeEventDate(item.end_date)),
+      createdAt: FieldValue.serverTimestamp(),
+    };
+    await db.collection('events').doc(id).set(formattedItem);
+    console.log(`Imported: ${item.title}`);
+  }
+  await bumpEventsRev(db);
+  console.log('Import completed successfully.');
 }
 
-importFromUpload();
+importFromUpload().catch((error) => {
+  console.error('Import failed:', error);
+  process.exit(1);
+});

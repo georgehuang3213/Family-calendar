@@ -8,9 +8,10 @@ node_modules/
 # Build
 dist/
 
-# FamilySync Calendar Data
+# FamilySync Calendar Data & Logs
 events.db
 events.db-journal
+webhook_logs.txt
 
 # Playwright MCP debug artifacts
 .playwright-mcp/

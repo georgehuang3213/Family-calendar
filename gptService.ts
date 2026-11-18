@@ -1,255 +1,288 @@
-import axios from "axios";
-import OpenAI from "openai";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { v4 as uuidv4 } from "uuid";
-import fs from "fs";
-import path from "path";
-
-const FAMILY_MEMBERS = ['全家', '江雪卿', '黃喬裕', '陳愉婷', '黃宣綾', '黃宣綸', '黃郁婷', '郭力維', '黃郁慈', '郭品佑', '郭品彤'];
-
-const MEMBER_COLORS: Record<string, string> = {
-  '全家': '#111827',
-  '江雪卿': '#E11D48',
-  '黃喬裕': '#2563EB',
-  '陳愉婷': '#059669',
-  '黃宣綾': '#D97706',
-  '黃宣綸': '#7C3AED',
-  '黃郁婷': '#DB2777',
-  '郭力維': '#4B5563',
-  '黃郁慈': '#EA580C',
-  '郭品佑': '#84CC16',
-  '郭品彤': '#06B6D4',
-};
+import axios from 'axios';
+import OpenAI from 'openai';
+import { FieldValue } from 'firebase-admin/firestore';
+import { v4 as uuidv4 } from 'uuid';
+import { FAMILY_MEMBERS, MEMBER_COLORS } from './shared/constants.js';
+import { getDb, bumpEventsRev } from './lib/firebaseAdmin.js';
+import {
+  formatTaipeiDate,
+  getTaipeiYear,
+  getWeekdayFromDateStr,
+  normalizeEventDate,
+  isValidCalendarDate,
+} from './lib/taipeiTime.js';
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+const MAX_CONTEXT_EVENTS = 150;
 
 /**
- * Lazy-retrieve Firebase DB instance safely
- */
-function getDb() {
-  try {
-    let databaseId = "(default)";
-    try {
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (config.firestoreDatabaseId) {
-          databaseId = config.firestoreDatabaseId;
-        }
-      }
-    } catch (e) {
-      console.warn("⚠️ Could not read firebase config in gptService");
-    }
-
-    if (getApps().length === 0) {
-      const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-      if (serviceAccountKey) {
-        initializeApp({
-          credential: cert(JSON.parse(serviceAccountKey))
-        });
-      }
-    }
-
-    if (getApps().length > 0) {
-      // Just check if we can get Firestore
-      const db = getFirestore(databaseId);
-      return db;
-    }
-  } catch (e) {
-    console.warn("⚠️ Could not lazy-init Firestore in gptService:", e);
-  }
-  return null;
-}
-
-/**
- * Fetch calendar context from Firestore as a readable string
+ * Fetch upcoming calendar context from Firestore as a readable string.
  */
 async function getCalendarEventsContext(): Promise<string> {
   const db = getDb();
   if (!db) {
-    return "【系統提示】：目前無法連線至 Firestore 資料庫，無法取得最新行程。";
+    return '【系統提示】：目前無法連線至 Firestore 資料庫，無法取得最新行程。';
   }
 
   try {
-    const snapshot = await db.collection("events").get();
-    let events = snapshot.docs.map((doc: any) => ({
+    const snapshot = await db.collection('events').get();
+    let events: any[] = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
 
-    const tz = "Asia/Taipei";
-    const now = new Date();
-    const todayStr = new Date(now.toLocaleString("en-US", { timeZone: tz })).toISOString().split('T')[0];
+    const todayStr = formatTaipeiDate();
 
-    // Filter out past events
-    events = events.filter((e: any) => {
-      const end = e.end_date || e.start_date;
-      return end >= todayStr;
+    // Filter out past events (normalize legacy dates if needed)
+    events = events.filter((e) => {
+      const start = normalizeEventDate(e.start_date);
+      const end = normalizeEventDate(e.end_date || e.start_date);
+      return typeof end === 'string' && end >= todayStr && typeof start === 'string';
     });
 
     if (events.length === 0) {
-      return "目前行事曆上沒有任何未來的行程。";
+      return '目前行事曆上沒有任何未來的行程。';
     }
 
     // Sort by date then time
-    events.sort((a: any, b: any) => {
-      const dateCompare = (a.start_date || "").localeCompare(b.start_date || "");
+    events.sort((a, b) => {
+      const dateCompare = String(a.start_date || '').localeCompare(String(b.start_date || ''));
       if (dateCompare !== 0) return dateCompare;
-      return (a.time || "").localeCompare(b.time || "");
+      return String(a.time || '').localeCompare(String(b.time || ''));
     });
 
-    let context = "【目前家庭行事曆上的行程表】:\n";
-    events.forEach((e: any) => {
-      const importantTag = e.is_important ? " (⚠️重要)" : "";
-      const dateStr = e.start_date === e.end_date ? e.start_date : `${e.start_date} 至 ${e.end_date}`;
-      context += `- ID: ${e.id} | 日期: ${dateStr} | 成員: ${e.member_name} | 標題: ${e.title} | 時間: ${e.time || "整天"}${importantTag}`;
+    const truncated = events.length > MAX_CONTEXT_EVENTS;
+    const sliced = events.slice(0, MAX_CONTEXT_EVENTS);
+
+    let context = '【目前家庭行事曆上的行程表】:\n';
+    sliced.forEach((e) => {
+      const importantTag = e.is_important ? ' (⚠️重要)' : '';
+      const endDate = e.end_date || e.start_date;
+      const dateStr = e.start_date === endDate ? e.start_date : `${e.start_date} 至 ${endDate}`;
+      context += `- ID: ${e.id} | 日期: ${dateStr} | 成員: ${e.member_name} | 標題: ${e.title} | 時間: ${e.time || '整天'}${importantTag}`;
       if (e.companions) context += ` | 同行伴同者: ${e.companions}`;
       if (e.description) context += ` | 備註: ${e.description}`;
-      context += "\n";
+      context += '\n';
     });
+    if (truncated) {
+      context += `（僅顯示最近 ${MAX_CONTEXT_EVENTS} 筆未來行程，總計 ${events.length} 筆）\n`;
+    }
 
     return context;
   } catch (err: any) {
-    console.error("❌ Failed to query calendar context in gptService:", err.message);
-    return "【系統提示】：讀取行事曆行程時發生錯誤。";
-  }
-}
-
-/** 事件版本號 +1（與 server.ts 的 bumpEventsRev 一致），讓前端用低成本輪詢偵測行程變更 */
-async function bumpEventsRev(db: any) {
-  try {
-    await db.collection("system_config").doc("events_meta").set(
-      { rev: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() },
-      { merge: true }
-    );
-  } catch (e) {
-    console.error("bumpEventsRev (gptService) failed:", e);
+    console.error('❌ Failed to query calendar context in gptService:', err.message);
+    return '【系統提示】：讀取行事曆行程時發生錯誤。';
   }
 }
 
 /**
- * Executes database actions parsed from ChatGPT's response
+ * Parse the JSON payload emitted after [JSON_ACTION], tolerating optional markdown code fences.
  */
-export async function executeGptAction(actionType: "create" | "update" | "delete", data: any): Promise<{ success: boolean; message: string; eventId?: string }> {
+function parseActionPayload(raw: string): { action?: string; data?: any } | null {
+  let cleaned = raw.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const startIdx = cleaned.indexOf('{');
+    const endIdx = cleaned.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx > startIdx) {
+      try {
+        return JSON.parse(cleaned.slice(startIdx, endIdx + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * Executes database actions parsed from ChatGPT's response.
+ */
+export async function executeGptAction(
+  actionType: 'create' | 'update' | 'delete',
+  data: any
+): Promise<{ success: boolean; message: string; eventId?: string }> {
   const db = getDb();
   if (!db) {
-    return { success: false, message: "資料庫尚未初始化，暫時無法變更行程。" };
+    return { success: false, message: '資料庫尚未初始化，暫時無法變更行程。' };
   }
 
   try {
-    if (actionType === "create") {
-      const id = uuidv4();
-      const member = FAMILY_MEMBERS.includes(data.member_name) ? data.member_name : FAMILY_MEMBERS[0];
-      const color = MEMBER_COLORS[member] || '#4F46E5';
-      
-      const newEvent = {
-        title: data.title || "未命名行程",
-        description: data.description || "",
-        start_date: data.start_date || new Date().toISOString().split("T")[0],
-        end_date: data.end_date || data.start_date || new Date().toISOString().split("T")[0],
-        time: data.time || "",
-        member_name: member,
-        color: color,
-        companions: data.companions || "",
-        is_important: !!data.is_important,
-        createdAt: FieldValue.serverTimestamp()
-      };
-
-      await db.collection("events").doc(id).set(newEvent);
-      await bumpEventsRev(db);
-      return { success: true, message: `已成功新增行程「${newEvent.title}」(${newEvent.start_date} - ${newEvent.member_name})`, eventId: id };
-    } 
-    
-    if (actionType === "update") {
-      if (!data.id) return { success: false, message: "更新行程失敗：缺少行程 ID。" };
-      
-      const docRef = db.collection("events").doc(data.id);
-      const doc = await docRef.get();
-      if (!doc.exists) {
-        return { success: false, message: `更新行程失敗：找不到對應的行程 (ID: ${data.id})。` };
+    if (actionType === 'create') {
+      const todayStr = formatTaipeiDate();
+      const rawStart = data?.start_date ? normalizeEventDate(String(data.start_date)) : todayStr;
+      if (!isValidCalendarDate(rawStart)) {
+        return { success: false, message: `新增行程失敗：start_date 日期格式無效 (${String(data?.start_date)})。` };
       }
 
-      const updateData: any = {
-        updatedAt: FieldValue.serverTimestamp()
+      const rawEnd = data?.end_date ? normalizeEventDate(String(data.end_date)) : rawStart;
+      if (!isValidCalendarDate(rawEnd)) {
+        return { success: false, message: `新增行程失敗：end_date 日期格式無效 (${String(data?.end_date)})。` };
+      }
+      if (rawEnd < rawStart) {
+        return { success: false, message: `新增行程失敗：結束日期 (${rawEnd}) 不可早於開始日期 (${rawStart})。` };
+      }
+
+      const rawTitle = typeof data?.title === 'string' && data.title.trim() ? data.title.trim().slice(0, 200) : '未命名行程';
+      const member = (FAMILY_MEMBERS as readonly string[]).includes(data?.member_name)
+        ? data.member_name
+        : FAMILY_MEMBERS[0];
+      const color = MEMBER_COLORS[member] || '#4F46E5';
+
+      const id = uuidv4();
+      const newEvent = {
+        id,
+        title: rawTitle,
+        description: typeof data?.description === 'string' ? data.description.slice(0, 2000) : '',
+        start_date: rawStart,
+        end_date: rawEnd,
+        time: typeof data?.time === 'string' ? data.time.trim().slice(0, 50) : '',
+        member_name: member,
+        color,
+        companions: typeof data?.companions === 'string' ? data.companions.slice(0, 500) : '',
+        is_important: Boolean(data?.is_important),
+        createdAt: FieldValue.serverTimestamp(),
       };
-      
-      if (data.title !== undefined) updateData.title = data.title;
-      if (data.description !== undefined) updateData.description = data.description;
-      if (data.start_date !== undefined) updateData.start_date = data.start_date;
-      if (data.end_date !== undefined) updateData.end_date = data.end_date;
-      if (data.time !== undefined) updateData.time = data.time;
-      if (data.companions !== undefined) updateData.companions = data.companions;
-      if (data.is_important !== undefined) updateData.is_important = !!data.is_important;
-      
-      if (data.member_name !== undefined && FAMILY_MEMBERS.includes(data.member_name)) {
+
+      await db.collection('events').doc(id).set(newEvent);
+      await bumpEventsRev(db);
+      return {
+        success: true,
+        message: `已成功新增行程「${newEvent.title}」(${newEvent.start_date} - ${newEvent.member_name})`,
+        eventId: id,
+      };
+    }
+
+    if (actionType === 'update') {
+      const targetId = typeof data?.id === 'string' ? data.id.trim() : '';
+      if (!targetId || targetId.includes('/')) {
+        return { success: false, message: '更新行程失敗：缺少有效的行程 ID。' };
+      }
+
+      const docRef = db.collection('events').doc(targetId);
+      const doc = await docRef.get();
+      if (!doc.exists) {
+        return { success: false, message: `更新行程失敗：找不到對應的行程 (ID: ${targetId})。` };
+      }
+
+      const existing = doc.data() || {};
+      const updateData: Record<string, any> = {
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      if (typeof data.title === 'string' && data.title.trim()) {
+        updateData.title = data.title.trim().slice(0, 200);
+      }
+      if (typeof data.description === 'string') {
+        updateData.description = data.description.slice(0, 2000);
+      }
+      if (data.start_date !== undefined) {
+        const normStart = normalizeEventDate(String(data.start_date));
+        if (!isValidCalendarDate(normStart)) {
+          return { success: false, message: `更新行程失敗：start_date 日期格式無效 (${String(data.start_date)})。` };
+        }
+        updateData.start_date = normStart;
+      }
+      if (data.end_date !== undefined) {
+        const normEnd = normalizeEventDate(String(data.end_date));
+        if (!isValidCalendarDate(normEnd)) {
+          return { success: false, message: `更新行程失敗：end_date 日期格式無效 (${String(data.end_date)})。` };
+        }
+        updateData.end_date = normEnd;
+      }
+
+      const effectiveStart = updateData.start_date ?? existing.start_date;
+      const effectiveEnd = updateData.end_date ?? existing.end_date ?? effectiveStart;
+      if (effectiveStart && effectiveEnd && effectiveEnd < effectiveStart) {
+        return { success: false, message: `更新行程失敗：結束日期 (${effectiveEnd}) 不可早於開始日期 (${effectiveStart})。` };
+      }
+
+      if (typeof data.time === 'string') {
+        updateData.time = data.time.trim().slice(0, 50);
+      }
+      if (typeof data.companions === 'string') {
+        updateData.companions = data.companions.slice(0, 500);
+      }
+      if (data.is_important !== undefined) {
+        updateData.is_important = Boolean(data.is_important);
+      }
+      if (typeof data.member_name === 'string' && (FAMILY_MEMBERS as readonly string[]).includes(data.member_name)) {
         updateData.member_name = data.member_name;
         updateData.color = MEMBER_COLORS[data.member_name] || '#4F46E5';
       }
 
       await docRef.update(updateData);
       await bumpEventsRev(db);
-      return { success: true, message: `已成功更新行程「${updateData.title || ''}」`, eventId: data.id };
+      return {
+        success: true,
+        message: `已成功更新行程「${updateData.title || existing.title || ''}」`,
+        eventId: targetId,
+      };
     }
 
-    if (actionType === "delete") {
-      const targetId = data.id || data; // accept either object with id or raw id string
-      if (!targetId) return { success: false, message: "刪除行程失敗：缺少行程 ID。" };
+    if (actionType === 'delete') {
+      const rawId = typeof data === 'string' ? data : data?.id;
+      const targetId = typeof rawId === 'string' ? rawId.trim() : '';
+      if (!targetId || targetId.includes('/')) {
+        return { success: false, message: '刪除行程失敗：缺少有效的行程 ID。' };
+      }
 
-      const docRef = db.collection("events").doc(targetId);
+      const docRef = db.collection('events').doc(targetId);
       const doc = await docRef.get();
       if (!doc.exists) {
-        return { success: false, message: `刪除行程失敗：找不到這筆行程可能已經刪除了。` };
+        return { success: false, message: '刪除行程失敗：找不到這筆行程（可能已經刪除了）。' };
       }
 
       await docRef.delete();
       await bumpEventsRev(db);
-      return { success: true, message: `已成功刪除行程！` };
+      return { success: true, message: '已成功刪除行程！' };
     }
 
-    return { success: false, message: "不支援的指令動作。" };
+    return { success: false, message: '不支援的指令動作。' };
   } catch (e: any) {
-    console.error("❌ executeGptAction Error:", e);
+    console.error('❌ executeGptAction Error:', e);
     return { success: false, message: `執行變更失敗: ${e.message}` };
   }
 }
 
 /**
- * Query OpenAI ChatGPT
+ * Query OpenAI ChatGPT.
  */
 export async function askChatGPT(
-  userQuery: string, 
+  userQuery: string,
   history: ChatMessage[] = [],
   currentYear?: number
 ): Promise<{ reply: string; actionExecuted?: string }> {
-  // Check API Key
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey.trim() === "" || apiKey === "YOUR_OPENAI_API_KEY_HERE") {
+  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_OPENAI_API_KEY_HERE') {
     return {
-      reply: "⚠️ 系統尚未設定 ChatGPT API 金鑰。\n請至 AI Studio 專案 Settings -> Secrets 設定 `OPENAI_API_KEY` 變數以啟用此功能。"
+      reply: '⚠️ 系統尚未設定 ChatGPT API 金鑰。\n請在後端環境變數（`.env` 或 Vercel Environment Variables）設定 `OPENAI_API_KEY` 以啟用此功能。',
     };
   }
 
   try {
-    const tz = "Asia/Taipei";
-    const currentLocTime = new Date().toLocaleString("en-US", { timeZone: tz });
-    const todayDate = new Date(currentLocTime);
-    const todayStr = todayDate.toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\//g, "-");
-    const currentYearNum = currentYear || todayDate.getFullYear();
+    const todayStr = formatTaipeiDate();
+    const currentYearNum = currentYear || getTaipeiYear();
+    const weekday = ['日', '一', '二', '三', '四', '五', '六'][getWeekdayFromDateStr(todayStr)];
 
     const calendarContext = await getCalendarEventsContext();
 
     const systemPrompt = `你是家庭行事曆的「ChatGPT 智慧小幫手」，一個貼心、親切、幽默且專業的 AI 家庭秘書。
-你的工作是協助家庭成員（江雪卿、黃喬裕、陳愉婷、黃宣綾、黃宣綸、黃郁婷、郭力維、黃郁慈、郭品佑、郭品彤 等人）查詢、新增、變更或刪除他們的行程與排班。
+你的工作是協助家庭成員（${FAMILY_MEMBERS.filter((m) => m !== '全家').join('、')} 等人）查詢、新增、變更或刪除他們的行程與排班。
 
 【重要環境資訊】
-- 今天本地日期是：${todayStr} (星期${["日", "一", "二", "三", "四", "五", "六"][todayDate.getDay()]})
+- 今天本地日期是：${todayStr} (星期${weekday})
 - 今年年份是：${currentYearNum}
-- 家庭成員名單（請只能設定給這幾位成員）：${FAMILY_MEMBERS.join(", ")}
+- 家庭成員名單（請只能設定給這幾位成員）：${FAMILY_MEMBERS.join(', ')}
   （如果成員的名字不在裡面，請禮貌地告知，並詢問要設定給哪一個家庭成員。'全家'也是合法的對象。注意：若是語音辨識造成的同音錯字（如喬玉->黃喬裕、宣倫->黃宣綸），請自動進行模糊比對並修正為正確的成員名稱）
 
 ${calendarContext}
@@ -260,7 +293,7 @@ ${calendarContext}
 然後緊接著輸出一行且只有一行的 JSON block（不要有 Markdown code block 標記），格式規定如下：
 
 1. 新增行程 (action: "create"):
-   {"action": "create", "data": {"title": "必填（例如: 排休、上班、去醫院、買菜）", "member_name": "必填（名字必須完全對應家庭成員，如: 黃喬裕）", "start_date": "必填（格式為 YYYY-MM-DD，若為明天請換算為相應日期。非整天行程也必須填寫日期）", "end_date": "選填（預設跟 start_date 同一天）", "time": "選填（例如 14:30，或時間段 14:30 - 16:00）", "companions": "選填（同行的人）", "description": "選填（備註資訊）", "is_important": false}}
+   {"action": "create", "data": {"title": "必填（例如: 排休、上班、去醫院、買菜）", "member_name": "必填（名字必須完全對應家庭成員，如: 黃喬裕）", "start_date": "必填（格式為 YYYY-MM-DD，若為明天請換算為相應日期。非整天行程也必須填寫日期）", "end_date": "選填（預設跟 start_date 同一天，YYYY-MM-DD）", "time": "選填（例如 14:30，或時間段 14:30 - 16:00）", "companions": "選填（同行的人）", "description": "選填（備註資訊）", "is_important": false}}
 
 2. 刪除行程 (action: "delete"):
    {"action": "delete", "data": {"id": "必填（必須填入上面行程表列出的正確行程 ID）"}}
@@ -277,92 +310,102 @@ ${calendarContext}
   [JSON_ACTION]
   {"action": "create", "data": {"title": "排休", "member_name": "黃宣綸", "start_date": "2026-05-25", "end_date": "2026-05-25", "time": ""}}`;
 
+    // Sanitize conversation history so client input cannot inject 'system' messages
+    const safeHistory = Array.isArray(history)
+      ? history
+          .filter((h) => (h?.role === 'user' || h?.role === 'assistant') && typeof h?.content === 'string')
+          .slice(-10)
+          .map((h) => ({ role: h.role, content: h.content.slice(0, 2000) }))
+      : [];
+
     const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...history.map(h => ({ role: h.role, content: h.content })),
-      { role: "user", content: userQuery }
+      { role: 'system', content: systemPrompt },
+      ...safeHistory,
+      { role: 'user', content: userQuery },
     ];
 
     const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+      'https://api.openai.com/v1/chat/completions',
       {
-        model: "gpt-4o-mini",
+        model: 'gpt-4o-mini',
         messages: apiMessages,
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: 1000,
       },
       {
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-        timeout: 15000
+        timeout: 15000,
       }
     );
 
-    let assistantReply = response.data.choices[0].message.content || "";
-    let actionExecutedText = "";
+    let assistantReply = response.data?.choices?.[0]?.message?.content || '';
+    let actionExecutedText = '';
 
-    // Parse JSON_ACTION if any
-    const actionMarker = "[JSON_ACTION]";
+    const actionMarker = '[JSON_ACTION]';
     if (assistantReply.includes(actionMarker)) {
-      const parts = assistantReply.split(actionMarker);
-      const speech = parts[0].trim();
-      const actionJsonStr = parts[1].trim();
+      const markerIdx = assistantReply.indexOf(actionMarker);
+      const speech = assistantReply.slice(0, markerIdx).trim();
+      const rawActionStr = assistantReply.slice(markerIdx + actionMarker.length).trim();
 
-      assistantReply = speech; // Strip JSON block from conversational reply
+      assistantReply = speech;
 
-      try {
-        const actionObj = JSON.parse(actionJsonStr);
-        if (actionObj && actionObj.action && actionObj.data) {
-          const actionResult = await executeGptAction(actionObj.action, actionObj.data);
-          if (actionResult.success) {
-            actionExecutedText = actionResult.message;
-            assistantReply += `\n\n✨ 【自動排程動作】：${actionResult.message} 😊`;
-          } else {
-            assistantReply += `\n\n⚠️ 【排程動作失敗】：${actionResult.message}`;
-          }
+      const actionObj = parseActionPayload(rawActionStr);
+      if (
+        actionObj &&
+        (actionObj.action === 'create' || actionObj.action === 'update' || actionObj.action === 'delete') &&
+        actionObj.data !== undefined
+      ) {
+        const actionResult = await executeGptAction(actionObj.action, actionObj.data);
+        if (actionResult.success) {
+          actionExecutedText = actionResult.message;
+          assistantReply += `\n\n✨ 【自動排程動作】：${actionResult.message} 😊`;
+        } else {
+          assistantReply += `\n\n⚠️ 【排程動作失敗】：${actionResult.message}`;
         }
-      } catch (err: any) {
-        console.error("❌ Failed to parse ChatGPT action JSON:", actionJsonStr, err.message);
+      } else {
+        console.error('❌ Failed to parse ChatGPT action JSON:', rawActionStr);
+        assistantReply += '\n\n⚠️ 【排程動作失敗】：無法解析 AI 回傳的排程指令，本次未寫入行事曆，請再試一次。';
       }
     }
 
     return {
       reply: assistantReply,
-      actionExecuted: actionExecutedText || undefined
+      actionExecuted: actionExecutedText || undefined,
     };
   } catch (error: any) {
-    console.error("❌ askChatGPT Error:", error.response?.data || error.message);
+    console.error('❌ askChatGPT Error:', error.response?.data || error.message);
     const apiErr = error.response?.data?.error?.message || error.message;
     return {
-      reply: `❌ 詢問 ChatGPT 時發生錯誤：${apiErr}\n（請檢查金鑰設定或是網路。)`
+      reply: `❌ 詢問 ChatGPT 時發生錯誤：${apiErr}\n（請檢查金鑰設定或是網路。）`,
     };
   }
 }
 
 /**
- * Transcribe Audio using OpenAI Whisper
+ * Transcribe Audio using OpenAI Whisper.
  */
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey.trim() === "" || apiKey === "YOUR_OPENAI_API_KEY_HERE") {
-    throw new Error("⚠️ 系統尚未設定 ChatGPT API 金鑰，無法辨識語音。");
+  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_OPENAI_API_KEY_HERE') {
+    throw new Error('⚠️ 系統尚未設定 ChatGPT API 金鑰，無法辨識語音。');
   }
 
   const openai = new OpenAI({ apiKey });
 
   try {
-    const file = await OpenAI.toFile(audioBuffer, "audio.m4a");
+    const file = await OpenAI.toFile(audioBuffer, 'audio.m4a');
     const response = await openai.audio.transcriptions.create({
       file: file as any,
-      model: "whisper-1",
-      language: "zh",
-      prompt: `這段語音主要關於家庭成員的行程管理與行事曆排班。常出現的字詞有：新增、刪除、查詢、更改、安排、行程、排班、放假。請特別注意以下家庭成員的正確名字寫法：${FAMILY_MEMBERS.join("，")}。請使用繁體中文，並加上適當的標點符號。`
+      model: 'whisper-1',
+      language: 'zh',
+      prompt: `這段語音主要關於家庭成員的行程管理與行事曆排班。常出現的字詞有：新增、刪除、查詢、更改、安排、行程、排班、放假。請特別注意以下家庭成員的正確名字寫法：${FAMILY_MEMBERS.join('，')}。請使用繁體中文，並加上適當的標點符號。`,
     });
     return response.text;
   } catch (error: any) {
-    console.error("❌ transcribeAudio Error:", error.message);
+    console.error('❌ transcribeAudio Error:', error.message);
     throw new Error(`語音辨識失敗: ${error.message}`);
   }
 }

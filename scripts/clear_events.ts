@@ -2,30 +2,13 @@
 // 用 firebase-admin（服務帳戶），需要 FIREBASE_SERVICE_ACCOUNT_KEY 環境變數（可放在 .env）。
 // 安全機制：必須加上 --yes 參數才會真的刪除，避免誤觸把全家行程清空。
 import 'dotenv/config';
-import fs from 'fs';
-import path from 'path';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-function getDb() {
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!serviceAccountKey) {
-    throw new Error('缺少 FIREBASE_SERVICE_ACCOUNT_KEY 環境變數（請在 .env 設定服務帳戶 JSON）。');
-  }
-  let databaseId = '(default)';
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (config.firestoreDatabaseId) databaseId = config.firestoreDatabaseId;
-  }
-  if (getApps().length === 0) {
-    initializeApp({ credential: cert(JSON.parse(serviceAccountKey)) });
-  }
-  return getFirestore(databaseId);
-}
+import { getDb, bumpEventsRev } from '../lib/firebaseAdmin.js';
 
 async function clearEvents() {
   const db = getDb();
+  if (!db) {
+    throw new Error('缺少 FIREBASE_SERVICE_ACCOUNT_KEY 環境變數（請在 .env 設定服務帳戶 JSON）。');
+  }
   const snapshot = await db.collection('events').get();
 
   if (!process.argv.includes('--yes')) {
@@ -41,6 +24,7 @@ async function clearEvents() {
     deleted++;
     console.log(`Deleted: ${document.id}`);
   }
+  await bumpEventsRev(db);
   console.log(`Events cleared. (${deleted} 筆)`);
 }
 
