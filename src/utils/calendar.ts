@@ -210,6 +210,31 @@ export function getLunarDate(date: Date, compact = false): string {
   }
 }
 
+export function getShortMemberName(member: string | undefined | null): string {
+  if (!member) return '';
+  if (member === '全家') return '全家';
+  return member.length > 2 ? member.slice(-2) : member;
+}
+
+/**
+ * Format event label for calendar cells: when viewing all members ('全部'),
+ * prefix with the 2-char member short name (e.g. "喬裕 排休") so users can tell who the event belongs to at a glance.
+ */
+export function formatCalendarBadgeTitle(
+  event: Pick<CalendarEvent, 'title' | 'member_name'>,
+  filterMember: string
+): string {
+  const title = String(event.title || '無標題').trim();
+  if (filterMember !== '全部') return title;
+
+  const shortMember = getShortMemberName(event.member_name);
+  if (!shortMember) return title;
+  if (title.includes(shortMember) || (event.member_name && title.includes(event.member_name))) {
+    return title;
+  }
+  return `${shortMember} ${title}`;
+}
+
 export function createEmptyEventForm(dateStr: string = format(new Date(), 'yyyy-MM-dd')): EventFormState {
   return {
     title: '',

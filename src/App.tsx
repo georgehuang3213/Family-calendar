@@ -39,6 +39,7 @@ import {
   MapPin,
   Megaphone,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import {
   FAMILY_MEMBERS,
@@ -67,6 +68,7 @@ import {
   parseEventTimeRange,
   normalizeDateForInput,
   getLunarDate,
+  formatCalendarBadgeTitle,
   createEmptyEventForm,
   buildCleanEventPayload,
 } from './utils/calendar';
@@ -1261,14 +1263,14 @@ export default function App() {
           <button
             onClick={() => setIsElderlyMode(!isElderlyMode)}
             className={cn(
-              'flex items-center justify-center px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl text-xs font-extrabold transition-colors shadow-sm border',
+              'items-center justify-center px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl text-xs font-extrabold transition-colors shadow-sm border',
               isElderlyMode
-                ? 'bg-amber-500 text-white border-amber-400'
-                : 'bg-white/95 dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-white/20 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-700'
+                ? 'flex bg-amber-500 text-white border-amber-400'
+                : 'hidden md:flex bg-white/95 dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-white/20 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-700'
             )}
             title="長輩友善模式"
           >
-            {isElderlyMode ? '退出長輩' : '長輩模式'}
+            {isElderlyMode ? '退出長輩模式' : '長輩模式'}
           </button>
 
           <button
@@ -1525,82 +1527,71 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Compact Today's Weather Banner (Mobile Only) */}
-            {currentWeather && (
-              <div className="md:hidden bg-gradient-to-r from-orange-600 to-violet-700 rounded-2xl px-4 py-3 mb-3.5 text-white shadow-sm relative overflow-hidden">
-                <div className="flex items-center justify-between gap-2 relative z-10">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-3xl font-black tracking-tight shrink-0">
-                      {Math.round(currentWeather.temp)}°
-                    </span>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5 text-xs font-extrabold truncate">
-                        <MapPin size={12} className="shrink-0 opacity-90" />
-                        <span className="truncate">{locationName}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs font-medium opacity-90 mt-0.5">
-                        {WEATHER_ICONS[currentWeather.code]}
-                        <span>{WEATHER_DESCRIPTIONS[currentWeather.code]}</span>
-                        <span>· 濕度 {currentWeather.humidity}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end shrink-0 gap-1">
-                    {weatherData?.[format(new Date(), 'yyyy-MM-dd')] && (
-                      <span className="text-xs font-extrabold bg-white/15 px-2 py-0.5 rounded-lg backdrop-blur-sm">
-                        {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].min)}° ~{' '}
-                        {Math.round(weatherData[format(new Date(), 'yyyy-MM-dd')].max)}°
-                      </span>
-                    )}
-                    {userCoords && (
-                      <button
-                        onClick={handleSaveCurrentLocationForLine}
-                        className="text-[10px] font-bold text-orange-100 underline underline-offset-2 opacity-90 hover:opacity-100"
-                        title="將此位置設為每日 LINE 推播的天氣地點"
-                      >
-                        設為推播地點
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Mobile Month Navigation + Desktop View Toggle */}
-            <div className="flex items-center justify-between gap-2 mb-3 md:mb-5">
-              {/* Mobile Month Switcher */}
-              <div className="flex md:hidden items-center justify-between w-full bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-2xl px-2 py-1.5 shadow-sm">
-                <div className="flex items-center gap-1">
+            {/* Integrated Mobile Month Switcher + Weather Bar / Desktop View Toggle */}
+            <div className="flex items-center justify-between gap-2 mb-2.5 md:mb-5">
+              {/* Mobile Unified Bar: Month Navigation (Left) + Weather Pill & Today (Right) */}
+              <div className="flex md:hidden items-center justify-between w-full bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-2xl px-2 py-1.5 shadow-sm gap-1">
+                <div className="flex items-center">
                   <button
                     onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
                     title="上個月"
                   >
-                    <ChevronLeft size={20} />
+                    <ChevronLeft size={19} />
                   </button>
-                  <span className="px-2 font-black text-base text-stone-900 dark:text-stone-100 tracking-tight">
+                  <span className="px-1.5 font-black text-[15px] text-stone-900 dark:text-stone-100 tracking-tight whitespace-nowrap">
                     {format(currentDate, 'yyyy年 MM月')}
                   </span>
                   <button
                     onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 transition-all"
                     title="下個月"
                   >
-                    <ChevronRight size={20} />
+                    <ChevronRight size={19} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      setCurrentDate(now);
+                      setSelectedDay(now);
+                    }}
+                    className="ml-1 px-2 py-0.5 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-200/60 dark:border-orange-800/50 text-[11px] font-extrabold active:scale-95 transition-all whitespace-nowrap"
+                  >
+                    今天
                   </button>
                 </div>
 
-                <button
-                  onClick={() => {
-                    const now = new Date();
-                    setCurrentDate(now);
-                    setSelectedDay(now);
-                  }}
-                  className="px-3 py-1 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-200/60 dark:border-orange-800/50 text-xs font-extrabold active:scale-95 transition-all"
-                >
-                  回到今天
-                </button>
+                {currentWeather && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todayRange = weatherData?.[format(new Date(), 'yyyy-MM-dd')];
+                      const rangeStr = todayRange
+                        ? ` (${Math.round(todayRange.min)}°~${Math.round(todayRange.max)}°C)`
+                        : '';
+                      if (userCoords) {
+                        showToast(
+                          `${locationName}：${WEATHER_DESCRIPTIONS[currentWeather.code] || ''} ${Math.round(currentWeather.temp)}°C${rangeStr} · 濕度 ${currentWeather.humidity}%`,
+                          'success',
+                          { label: '設為推播地點', onClick: handleSaveCurrentLocationForLine },
+                          5000
+                        );
+                      } else {
+                        showToast(
+                          `${locationName}：${WEATHER_DESCRIPTIONS[currentWeather.code] || ''} ${Math.round(currentWeather.temp)}°C${rangeStr} · 濕度 ${currentWeather.humidity}%`
+                        );
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-orange-600 to-violet-600 text-white text-xs font-extrabold shadow-xs active:scale-95 transition-transform min-w-0 shrink-0"
+                    title="點擊查看詳細天氣或設為 LINE 推播地點"
+                  >
+                    <span className="shrink-0">{WEATHER_ICONS[currentWeather.code]}</span>
+                    <span className="font-black">{Math.round(currentWeather.temp)}°</span>
+                    <span className="text-[10px] font-bold text-orange-100 truncate max-w-[68px]">
+                      {locationName.split(' ').pop() || locationName}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Desktop View Toggle */}
@@ -1631,7 +1622,7 @@ export default function App() {
             </div>
 
             {/* Compact Single-Row Filter & Quick-Add Bar */}
-            <div className="mb-3.5 md:mb-5 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="mb-2.5 md:mb-5 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {/* 成員篩選下拉選單 */}
               <div className="relative flex-shrink-0">
                 <select
@@ -1774,27 +1765,33 @@ export default function App() {
                     const maxDisplaySlots = 4;
                     const daySlots: Array<CalendarEvent | null> = new Array(maxDisplaySlots).fill(null);
                     const dayOverflow: CalendarEvent[] = [];
+                    let lastDesktopSlot = -1;
 
                     dayEvents.forEach((event) => {
                       const lane = eventLanes[event.id] ?? 999;
                       if (lane < maxDisplaySlots) {
                         daySlots[lane] = event;
+                        if (lane > lastDesktopSlot) lastDesktopSlot = lane;
                       } else {
                         dayOverflow.push(event);
                       }
                     });
+                    const activeDaySlots = lastDesktopSlot >= 0 ? daySlots.slice(0, lastDesktopSlot + 1) : [];
 
                     const maxMobileSlots = 3;
                     const mobileSlots: Array<CalendarEvent | null> = new Array(maxMobileSlots).fill(null);
                     const mobileOverflow: CalendarEvent[] = [];
+                    let lastMobileSlot = -1;
                     dayEvents.forEach((event) => {
                       const lane = eventLanes[event.id] ?? 999;
                       if (lane < maxMobileSlots) {
                         mobileSlots[lane] = event;
+                        if (lane > lastMobileSlot) lastMobileSlot = lane;
                       } else {
                         mobileOverflow.push(event);
                       }
                     });
+                    const activeMobileSlots = lastMobileSlot >= 0 ? mobileSlots.slice(0, lastMobileSlot + 1) : [];
 
                     const isToday = isSameDay(day, new Date());
                     const isCurrentMonth = isSameMonth(day, monthStart);
@@ -1829,7 +1826,7 @@ export default function App() {
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, day)}
                         className={cn(
-                          'min-h-[94px] sm:min-h-[112px] md:min-h-[140px] p-1 md:p-2 border-r border-b border-stone-100 dark:border-stone-800/80 last:border-r-0 transition-all cursor-pointer relative select-none',
+                          'min-h-[76px] sm:min-h-[98px] md:min-h-[130px] p-1 md:p-2 border-r border-b border-stone-100 dark:border-stone-800/80 last:border-r-0 transition-all cursor-pointer relative select-none',
                           !isCurrentMonth && 'bg-stone-50/50 dark:bg-stone-900/40 opacity-60',
                           isSelected && 'bg-orange-50/60 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-400 z-10',
                           isHoliday && isCurrentMonth && 'bg-rose-50/30 dark:bg-rose-950/15',
@@ -1942,11 +1939,12 @@ export default function App() {
                         <div className="flex flex-col gap-0.5 md:gap-1 relative z-20">
                           {/* Desktop Event Bars */}
                           <div className="hidden md:flex flex-col gap-1">
-                            {daySlots.map((event, slotIndex) => {
+                            {activeDaySlots.map((event, slotIndex) => {
                               if (!event) {
                                 return <div key={`empty-${slotIndex}`} className="h-[22px] invisible" />;
                               }
                               const eventTitle = String(event.title || '無標題');
+                              const badgeLabel = formatCalendarBadgeTitle(event, filterMember);
                               const isLeave = eventTitle.includes('休') || eventTitle.includes('假');
                               const icon = getEventIcon(eventTitle, 10);
                               const { start, end } = getEventDayBounds(event);
@@ -1987,7 +1985,7 @@ export default function App() {
                                 >
                                   {event.is_important && <span className="shrink-0 text-amber-500">⭐</span>}
                                   {icon && <span className="shrink-0">{icon}</span>}
-                                  <span className="truncate">{eventTitle}</span>
+                                  <span className="truncate">{badgeLabel}</span>
                                 </div>
                               );
                             })}
@@ -1998,13 +1996,13 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Mobile Event Bars: Clean & Legible (No Icon Clutter) */}
-                          <div className="md:hidden flex flex-col gap-1">
-                            {mobileSlots.map((event, slotIndex) => {
+                          {/* Mobile Event Bars: Clean, Member-Prefixed & Legible */}
+                          <div className="md:hidden flex flex-col gap-0.5">
+                            {activeMobileSlots.map((event, slotIndex) => {
                               if (!event) {
                                 return <div key={`empty-mobile-${slotIndex}`} className="h-[17px] invisible" />;
                               }
-                              const eventTitle = String(event.title || '無標題');
+                              const badgeLabel = formatCalendarBadgeTitle(event, filterMember);
                               const { start, end } = getEventDayBounds(event);
                               const isMultiDay = start.getTime() !== end.getTime();
                               const isStart = isSameDay(day, start);
@@ -2023,22 +2021,22 @@ export default function App() {
                                     borderBottomRightRadius: isEnd || !isMultiDay ? '3px' : '0',
                                     marginLeft: isStart || !isMultiDay ? '0' : '-4px',
                                     marginRight: isEnd || !isMultiDay ? '0' : '-4px',
-                                    paddingLeft: isStart || !isMultiDay ? '3px' : '5px',
-                                    paddingRight: isEnd || !isMultiDay ? '3px' : '5px',
+                                    paddingLeft: isStart || !isMultiDay ? '2.5px' : '4px',
+                                    paddingRight: isEnd || !isMultiDay ? '2px' : '4px',
                                     zIndex: isMultiDay ? 10 : 1,
                                   }}
                                   className={cn(
-                                    'text-[10px] font-extrabold leading-none truncate h-[17px] flex items-center gap-0.5',
+                                    'text-[10px] tracking-tighter font-extrabold leading-none truncate h-[17px] flex items-center gap-0.5',
                                     event.syncing && 'opacity-50 animate-pulse'
                                   )}
                                 >
                                   {event.is_important && <span className="shrink-0 text-[8px]">⭐</span>}
-                                  <span className="truncate">{eventTitle}</span>
+                                  <span className="truncate">{badgeLabel}</span>
                                 </div>
                               );
                             })}
                             {mobileOverflow.length > 0 && (
-                              <div className="text-[9px] leading-none text-stone-400 dark:text-stone-500 font-extrabold pl-0.5">
+                              <div className="text-[9px] leading-none text-stone-400 dark:text-stone-500 font-extrabold pl-0.5 pt-0.5">
                                 +{mobileOverflow.length} 則
                               </div>
                             )}
@@ -2310,37 +2308,71 @@ export default function App() {
         )}
       </main>
 
-      {/* Bottom Navigation Bar for Mobile */}
+      {/* Bottom Navigation Bar for Mobile (5-Item Dock: Calendar | List | + | AI | Elderly) */}
       {!isElderlyMode && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-stone-200/80 dark:border-stone-800 px-8 py-2 flex items-center justify-between z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-stone-200/80 dark:border-stone-800 px-3 py-1.5 grid grid-cols-5 items-center z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <button
-            onClick={() => setViewMode('calendar')}
+            onClick={() => {
+              setIsChatOpen(false);
+              setViewMode('calendar');
+            }}
             className={cn(
-              'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
-              viewMode === 'calendar' ? 'text-orange-600 dark:text-orange-400' : 'text-stone-400 dark:text-stone-500'
+              'flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all',
+              viewMode === 'calendar' && !isChatOpen
+                ? 'text-orange-600 dark:text-orange-400'
+                : 'text-stone-400 dark:text-stone-500'
             )}
           >
-            <CalendarIcon size={20} />
-            <span className="text-[11px] font-extrabold">月曆</span>
+            <CalendarIcon size={19} />
+            <span className="text-[10px] font-extrabold">月曆</span>
           </button>
 
           <button
-            onClick={() => openCreateModal(selectedDay)}
-            className="w-14 h-14 bg-orange-600 text-white rounded-full shadow-lg shadow-orange-600/30 flex items-center justify-center -translate-y-5 border-4 border-orange-50 dark:border-stone-950 active:scale-90 transition-all"
-            title="新增活動"
+            onClick={() => {
+              setIsChatOpen(false);
+              setViewMode('list');
+            }}
+            className={cn(
+              'flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all',
+              viewMode === 'list' && !isChatOpen
+                ? 'text-orange-600 dark:text-orange-400'
+                : 'text-stone-400 dark:text-stone-500'
+            )}
           >
-            <Plus size={26} />
+            <Clock size={19} />
+            <span className="text-[10px] font-extrabold">列表</span>
+          </button>
+
+          <div className="flex justify-center">
+            <button
+              onClick={() => openCreateModal(selectedDay)}
+              className="w-12 h-12 bg-orange-600 text-white rounded-full shadow-lg shadow-orange-600/30 flex items-center justify-center -translate-y-3.5 border-4 border-orange-50 dark:border-stone-950 active:scale-90 transition-all"
+              title="新增活動"
+            >
+              <Plus size={24} />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className={cn(
+              'flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all relative',
+              isChatOpen ? 'text-violet-600 dark:text-violet-400' : 'text-stone-400 dark:text-stone-500'
+            )}
+          >
+            <Sparkles size={19} />
+            <span className="text-[10px] font-extrabold">AI 秘書</span>
           </button>
 
           <button
-            onClick={() => setViewMode('list')}
-            className={cn(
-              'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
-              viewMode === 'list' ? 'text-orange-600 dark:text-orange-400' : 'text-stone-400 dark:text-stone-500'
-            )}
+            onClick={() => {
+              setIsChatOpen(false);
+              setIsElderlyMode(true);
+            }}
+            className="flex flex-col items-center gap-0.5 py-1 rounded-xl text-stone-400 dark:text-stone-500 hover:text-amber-600 transition-all"
           >
-            <Clock size={20} />
-            <span className="text-[11px] font-extrabold">列表</span>
+            <User size={19} />
+            <span className="text-[10px] font-extrabold">長輩版</span>
           </button>
         </nav>
       )}
