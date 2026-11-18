@@ -395,15 +395,32 @@ export default function App() {
 
     const initLocationAndWeather = async () => {
       let weatherAlreadyConfigured = false;
+      let savedWeatherCfg: { lat?: number | null; lon?: number | null; locationName?: string } | null = null;
       try {
         const cfgRes = await apiFetch('/api/config/weather');
         if (cfgRes.ok) {
           const cfg = await cfgRes.json();
           weatherAlreadyConfigured = Boolean(cfg.configured);
+          savedWeatherCfg = cfg;
+          if (cfg.locationName) {
+            setLocationName(cfg.locationName);
+          }
         }
       } catch {
         // Ignore config check error
       }
+
+      const fallbackWeather = () => {
+        if (
+          savedWeatherCfg &&
+          typeof savedWeatherCfg.lat === 'number' &&
+          typeof savedWeatherCfg.lon === 'number'
+        ) {
+          fetchWeather(savedWeatherCfg.lat, savedWeatherCfg.lon);
+        } else {
+          fetchWeather();
+        }
+      };
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -439,12 +456,12 @@ export default function App() {
           },
           (err) => {
             console.error('Geolocation error:', err);
-            fetchWeather();
+            fallbackWeather();
           },
           { timeout: 10000, maximumAge: 60000 }
         );
       } else {
-        fetchWeather();
+        fallbackWeather();
       }
     };
     initLocationAndWeather();
@@ -501,7 +518,20 @@ export default function App() {
           return;
         }
         if (data && Array.isArray(data.events)) {
-          setEvents(processDatabaseEvents(data.events));
+          const processed = processDatabaseEvents(data.events);
+          setEvents((prev) => {
+            const pendingOptimistic = prev.filter(
+              (e) =>
+                String(e.id).startsWith('temp-') &&
+                !processed.some(
+                  (p) =>
+                    p.title === e.title &&
+                    p.start_date === e.start_date &&
+                    p.member_name === e.member_name
+                )
+            );
+            return pendingOptimistic.length > 0 ? [...processed, ...pendingOptimistic] : processed;
+          });
           setStorageSource('firestore');
           setError(null);
         }
@@ -632,6 +662,10 @@ export default function App() {
 
   // Drag & Drop handlers
   const handleDragStart = (e: React.DragEvent, eventId: string | number) => {
+    if (String(eventId).startsWith('temp-')) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('eventId', String(eventId));
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -689,7 +723,7 @@ export default function App() {
     if (pendingQuickAdds.current.has(lockKey)) return;
 
     const alreadyExists = events.some(
-      (e) => e.member_name === member && e.start_date === dateStr && e.title === preset.title
+      (e) => e.member_name === member && e.title === preset.title && isEventOnDate(e, selectedDay)
     );
     if (alreadyExists) {
       showToast(`${member} 在 ${format(selectedDay, 'MM/dd')} 已經有${preset.title}了`, 'error');
@@ -746,7 +780,13 @@ export default function App() {
       showToast(`已成功新增 ${member} ${preset.title}`);
 
       if (result.id) {
-        setEvents((prev) => prev.map((e) => (String(e.id) === tempId ? { ...e, id: result.id, syncing: false } : e)));
+        const realId = String(result.id);
+        setEvents((prev) => {
+          if (prev.some((e) => String(e.id) === realId)) {
+            return prev.filter((e) => String(e.id) !== tempId);
+          }
+          return prev.map((e) => (String(e.id) === tempId ? { ...e, id: realId, syncing: false } : e));
+        });
       }
     } catch (err: any) {
       console.error('Quick Add Error:', err);
@@ -805,6 +845,10 @@ export default function App() {
   };
 
   const handleEditClick = (event: CalendarEvent) => {
+    if (String(event.id).startsWith('temp-')) {
+      showToast('此活動正在同步中，請稍候再編輯', 'error');
+      return;
+    }
     setEditingEventId(event.id);
     const startDate = normalizeDateForInput(event.start_date);
     const endDate = normalizeDateForInput(event.end_date || event.start_date);
@@ -827,6 +871,10 @@ export default function App() {
   };
 
   const handleDeleteEvent = (event: CalendarEvent) => {
+    if (String(event.id).startsWith('temp-')) {
+      showToast('此活動正在同步中，請稍候再操作', 'error');
+      return;
+    }
     setEventToDelete(event.id);
     setEventToDeleteObj(event);
     setIsDeleteModalOpen(true);
@@ -846,7 +894,13 @@ export default function App() {
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || '復原失敗');
       if (result.id) {
-        setEvents((prev) => prev.map((e) => (String(e.id) === tempId ? { ...e, id: result.id } : e)));
+        const realId = String(result.id);
+        setEvents((prev) => {
+          if (prev.some((e) => String(e.id) === realId)) {
+            return prev.filter((e) => String(e.id) !== tempId);
+          }
+          return prev.map((e) => (String(e.id) === tempId ? { ...e, id: realId } : e));
+        });
       }
       showToast('已復原行程');
     } catch (err: any) {
@@ -948,11 +1002,25 @@ export default function App() {
 
       if (result.event) {
         const serverEvent = { ...result.event, id: String(result.event.id) };
-        setEvents((prev) =>
-          prev.map((ev) => (ev.id === optimisticEvent.id || String(ev.id) === serverEvent.id ? serverEvent : ev))
-        );
+        setEvents((prev) => {
+          const alreadyHasReal = !isEditing && prev.some((ev) => String(ev.id) === serverEvent.id);
+          if (alreadyHasReal) {
+            return prev
+              .filter((ev) => ev.id !== optimisticEvent.id)
+              .map((ev) => (String(ev.id) === serverEvent.id ? serverEvent : ev));
+          }
+          return prev.map((ev) =>
+            ev.id === optimisticEvent.id || String(ev.id) === serverEvent.id ? serverEvent : ev
+          );
+        });
       } else if (!isEditing && result.id) {
-        setEvents((prev) => prev.map((ev) => (ev.id === optimisticEvent.id ? { ...ev, id: result.id } : ev)));
+        const realId = String(result.id);
+        setEvents((prev) => {
+          if (prev.some((ev) => String(ev.id) === realId)) {
+            return prev.filter((ev) => ev.id !== optimisticEvent.id);
+          }
+          return prev.map((ev) => (ev.id === optimisticEvent.id ? { ...ev, id: realId } : ev));
+        });
       }
 
       setIsModalOpen(false);

@@ -947,6 +947,14 @@ async function startServer() {
 
   async function handleLineEvent(event: WebhookEvent) {
     if (!lineClient) return;
+    const replyToken = (event as any).replyToken;
+    if (
+      replyToken === '00000000000000000000000000000000' ||
+      replyToken === 'ffffffffffffffffffffffffffffffff'
+    ) {
+      logToDebugFile('Ignored LINE webhook verification dummy event.');
+      return;
+    }
     logToDebugFile(`handleLineEvent called for event type: ${event.type} | source: ${JSON.stringify(event.source)}`);
     console.log(`🔍 Processing event type: ${event.type}`);
 
